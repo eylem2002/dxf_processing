@@ -38,3 +38,12 @@ To get the project up and running locally, please follow these steps:
   uvicorn app.main:app --reload
 
 
+## 2. Start the Frontend Application
+- Navigate to the frontend directory in your terminal.
+- Install project dependencies by running:
+
+  ```bash
+  npm install
+
+
+
