@@ -24,15 +24,3 @@ app.add_middleware(
 # This encapsulates all '/process_dxf/' and '/floors/{plan_id}' endpoints
 app.include_router(router, tags=["DXF Floor Plans"])
 
-# You can mount static files if you want to serve PNGs directly:
-# from fastapi.staticfiles import StaticFiles
-# app.mount("/floor_images", StaticFiles(directory="floor_pngs"), name="floor_images")
-
-# Application startup and shutdown events can be added here if needed:
-# @app.on_event("startup")
-# async def on_startup():
-#     ...
-#
-# @app.on_event("shutdown")
-# async def on_shutdown():
-#     ...

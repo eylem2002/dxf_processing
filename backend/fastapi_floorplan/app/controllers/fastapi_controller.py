@@ -29,8 +29,17 @@
 #    - Description: Serves a previously exported image by its image_id.
 #    - Returns: FileResponse with image content (PNG/JPEG).
 #
+# 6. POST /link_dxf_to_project/
+#    - Description: Links a processed DXF floor plan to a project.
+#    - Action: Associates the given project_id with the specified floor_plan_id in the DB.
+#    - Returns: A success message on completion.
+#
+# 7. GET /projects/{project_id}/dxfs
+#    - Description: Retrieves all floor plans linked to a given project_id.
+#    - Returns: A list of floor plan metadata.
 #
 # ------------------------------------------------------------------------------
+
 
 
 from app.controllers.db_controller import DbController
