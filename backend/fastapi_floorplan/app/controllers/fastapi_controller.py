@@ -34,6 +34,7 @@
 
 
 from app.controllers.db_controller import DbController
+from app.models import ExportParams, LinkRequest, ProcessDxfParams
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -43,19 +44,6 @@ from fastapi import Query
 from app.config import EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
 
 router = APIRouter()
-
-
-class ProcessDxfParams(BaseModel):
-    keywords: Optional[List[str]] = None
-    blacklist: Optional[List[str]] = None
-    excluded_layer_names: Optional[Set[str]] = None
-    dpi: Optional[int] = None
-
-
-class ExportParams(BaseModel):
-    floor_id: str
-    floor: str
-    view_index: int
 
 
 @router.post("/process_dxf/")
@@ -137,11 +125,6 @@ def get_image_by_id(image_id: str):
         raise HTTPException(status_code=404, detail=str(e))
     
     
-
-
-class LinkRequest(BaseModel):
-    project_id: str
-    floor_plan_id: str
 
 @router.post("/link_dxf_to_project/")
 def link_dxf_to_project(link: LinkRequest):

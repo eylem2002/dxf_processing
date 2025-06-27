@@ -10,6 +10,8 @@ from sqlalchemy.orm import declarative_base
 from datetime import datetime
 from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.orm import relationship
+from pydantic import BaseModel
+from typing import List, Set, Optional
 # Base class for all ORM models
 Base = declarative_base()
 
@@ -39,4 +41,23 @@ class ProjectDxfLink(Base):
     floor_plan_id = Column(String(100), ForeignKey("floor_plans.id"), primary_key=True)
 
     floor_plan = relationship("FloorPlan", back_populates="project_links")
+    
+class ProcessDxfParams(BaseModel):
+    keywords: Optional[List[str]] = None
+    blacklist: Optional[List[str]] = None
+    excluded_layer_names: Optional[Set[str]] = None
+    dpi: Optional[int] = None
+
+
+class ExportParams(BaseModel):
+    floor_id: str
+    floor: str
+    view_index: int
+    
+    
+class LinkRequest(BaseModel):
+    project_id: str
+    floor_plan_id: str
+    
+    
     
