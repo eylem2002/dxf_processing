@@ -125,7 +125,6 @@ def get_image_by_id(image_id: str):
         raise HTTPException(status_code=404, detail=str(e))
     
     
-
 @router.post("/link_dxf_to_project/")
 def link_dxf_to_project(link: LinkRequest):
     try:
