@@ -1,10 +1,42 @@
+/**
+ * DXFDetail Component
+ *
+ * A detailed view page for a single DXF floor plan.
+ * - Fetches metadata for a specific floor plan using its `planId`.
+ * - Renders all related floor images grouped by keyword (floor type).
+ * - Allows the user to select an image and export it using the `/export/` API.
+ *
+ * Dependencies:
+ * - React (hooks): useState, useEffect
+ * - Axios: for communicating with the backend APIs
+ */
+
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
+/**
+ * DXFDetail Component
+ *
+ * @param {string} planId - The unique identifier of the DXF floor plan to display
+ * 
+ * Functional Overview:
+ * - Loads floor plan metadata on mount using planId.
+ * - Displays image previews grouped by floor (keyword).
+ * - Lets users select one image at a time.
+ * - Sends export request for selected image via API.
+ */
 const DXFDetail = ({ planId }) => {
+
+  // Stores the retrieved metadata for the floor plan
   const [data, setData] = useState(null);
+
+  // Tracks the currently selected image (floor name + index)
   const [selectedImage, setSelectedImage] = useState({ floor: null, index: null });
 
+  /**
+   * Fetch floor plan metadata once planId is available.
+   * Invoked automatically when component mounts or when planId changes.
+   */
   useEffect(() => {
     if (!planId) return;
     axios.get(`/floors/${planId}`)
@@ -12,6 +44,11 @@ const DXFDetail = ({ planId }) => {
       .catch(err => console.error(err));
   }, [planId]);
 
+
+  /**
+   * Sends export request for the currently selected image.
+   * Validates selection first and then hits `/export/` endpoint.
+   */
   const exportImage = () => {
     if (!selectedImage.floor || selectedImage.index === null) {
       alert("Please select an image to export.");
@@ -30,6 +67,7 @@ const DXFDetail = ({ planId }) => {
     });
   };
 
+  // Show loading indicator while metadata is being fetched
   if (!data) return <div>Loading...</div>;
 
   return (

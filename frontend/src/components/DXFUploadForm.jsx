@@ -1,8 +1,33 @@
+/**
+ * DXFUploadForm.jsx
+ * 
+ * A React component for uploading DXF files and linking them to a project.
+ * 
+ * Features:
+ * - Form for entering project ID and optional filter parameters.
+ * - Uploads multiple DXF files (prevents duplicates).
+ * - Sends files and processing parameters to a FastAPI backend.
+ * - Handles backend response and links floor plans to the project.
+ * - Displays upload progress and status messages.
+ * 
+ * Accessibility: Includes labels, aria attributes, and keyboard-friendly controls.
+ */
+
 import React, { useState } from 'react';
 import axios from 'axios';
 import './DXFUploadForm.css';
 
+
+/**
+ * DXFUploadForm Component
+ * 
+ * Props:
+ * - projectId: The current project ID (string)
+ * - setProjectId: Function to update the project ID state in parent
+ * - onUploadSuccess: Callback when upload & linking succeed
+ */
 const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
+  // Internal component state
   const [files, setFiles] = useState([]);
   const [dpi, setDpi] = useState('300');
   const [keywords, setKeywords] = useState('');
@@ -11,7 +36,10 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Handle adding new files without duplicates
+  /**
+   * handleFileChange
+   * Prevents duplicate file selection and updates state with new files
+   */
   const handleFileChange = (e) => {
     const selected = Array.from(e.target.files).filter(
       newFile => !files.some(existingFile => existingFile.name === newFile.name)
@@ -20,12 +48,19 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
     e.target.value = null; // reset to allow selecting same file again if removed
   };
 
-  // Remove a selected file from list
+  /**
+   * removeFile
+   * Removes a selected file from the list by its index
+   */
   const removeFile = (index) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Upload handler
+  /**
+   * handleUpload
+   * Validates input, sends files and processing parameters to backend,
+   * links floor plans to the project, and handles upload state.
+   */
   const handleUpload = async () => {
     // Validate mandatory fields: Project ID and Files
     if (!projectId.trim()) {
