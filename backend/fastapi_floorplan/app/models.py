@@ -30,6 +30,7 @@ class FloorPlan(Base):
     project_links = relationship("ProjectDxfLink", back_populates="floor_plan")
 
 
+
 class ProjectDxfLink(Base):
     __tablename__ = "project_dxf_links"
 
