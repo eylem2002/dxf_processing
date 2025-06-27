@@ -127,6 +127,9 @@ def get_image_by_id(image_id: str):
     
 @router.post("/link_dxf_to_project/")
 def link_dxf_to_project(link: LinkRequest):
+    """
+    Links a specific floor plan (DXF) to a given project using project and floor plan IDs.    
+    """
     try:
         DbController.link_floor_to_project(link.project_id, link.floor_plan_id)
         return {"message": "Linked successfully"}
@@ -135,6 +138,9 @@ def link_dxf_to_project(link: LinkRequest):
 
 @router.get("/projects/{project_id}/dxfs")
 def get_dxfs_for_project(project_id: str):
+    """
+    Retrieves all floor plans (DXFs) linked to the specified project ID.   
+    """
     try:
         return DbController.get_project_floorplans(project_id)
     except Exception as e:
