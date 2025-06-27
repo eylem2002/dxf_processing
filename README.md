@@ -25,38 +25,16 @@ This project provides a web-based interface and backend API for uploading, proce
 - npm or yarn
 
   
-Running the Application
+### Running the Application
+
 To get the project up and running locally, please follow these steps:
 
-Start the Backend Server
+## 1. Start the Backend Server
+- Navigate to the backend directory in your terminal.
+- Activate your Python environment (e.g., using `venv` or `conda`).
+- Run the FastAPI server with the following command:
+  
+  ```bash
+  uvicorn app.main:app --reload
 
-Navigate to the backend directory in your terminal.
-
-Activate your Python environment (e.g., using venv or conda).
-
-Run the FastAPI server with the following command:
-
-bash
-Copy
-Edit
-uvicorn app.main:app --reload
-The backend API will usually be available at http://localhost:8000.
-
-Start the Frontend Application
-
-Open a new terminal window and navigate to the frontend directory.
-
-Install dependencies if you haven’t already by running:
-
-bash
-Copy
-Edit
-npm install
-Start the React development server by running:
-
-bash
-Copy
-Edit
-npm start
-The frontend app will open automatically in your default browser at http://localhost:3000.
 
