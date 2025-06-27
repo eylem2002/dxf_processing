@@ -10,6 +10,7 @@ const DXFUploadForm = ({ onUploadSuccess }) => {
   const [blacklist, setBlacklist] = useState('');
   const [excludedLayers, setExcludedLayers] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false); 
 
   const handleUpload = async () => {
     if (!projectId.trim()) {
@@ -20,6 +21,10 @@ const DXFUploadForm = ({ onUploadSuccess }) => {
       alert("Please select at least one DXF file.");
       return;
     }
+
+    setLoading(true);           
+    setMessage('Uploading, please wait...');
+
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     const params = {
@@ -28,6 +33,7 @@ const DXFUploadForm = ({ onUploadSuccess }) => {
       blacklist: blacklist || undefined,
       excluded_layer_names: excludedLayers || undefined,
     };
+
     try {
       const res = await axios.post('http://localhost:8000/process_dxf/', formData, {
         params,
@@ -44,45 +50,49 @@ const DXFUploadForm = ({ onUploadSuccess }) => {
       onUploadSuccess();
     } catch (err) {
       console.error(err);
-      setMessage('❌ Upload failed. Check console or backend logs.');
+      setMessage('Upload failed. Check console or backend logs.');
+    } finally {
+      setLoading(false);         
     }
   };
 
   return (
     <div className="upload-form-container">
-      <h3>📐 Upload DXF Files</h3>
+      <h3>Upload DXF Files</h3>
 
       <div className="form-group">
         <label>Project ID</label>
-        <input type="text" value={projectId} onChange={e => setProjectId(e.target.value)} />
+        <input type="text" value={projectId} onChange={e => setProjectId(e.target.value)} disabled={loading} />
       </div>
 
       <div className="form-group">
         <label>DPI (default 300)</label>
-        <input type="number" value={dpi} onChange={e => setDpi(e.target.value)} />
+        <input type="number" value={dpi} onChange={e => setDpi(e.target.value)} disabled={loading} />
       </div>
 
       <div className="form-group">
         <label>Keywords (comma-separated)</label>
-        <input type="text" value={keywords} onChange={e => setKeywords(e.target.value)} />
+        <input type="text" value={keywords} onChange={e => setKeywords(e.target.value)} disabled={loading} />
       </div>
 
       <div className="form-group">
         <label>Blacklist (comma-separated)</label>
-        <input type="text" value={blacklist} onChange={e => setBlacklist(e.target.value)} />
+        <input type="text" value={blacklist} onChange={e => setBlacklist(e.target.value)} disabled={loading} />
       </div>
 
       <div className="form-group">
         <label>Excluded Layers (comma-separated)</label>
-        <input type="text" value={excludedLayers} onChange={e => setExcludedLayers(e.target.value)} />
+        <input type="text" value={excludedLayers} onChange={e => setExcludedLayers(e.target.value)} disabled={loading} />
       </div>
 
       <div className="form-group">
         <label>Select DXF Files</label>
-        <input type="file" multiple accept=".dxf" onChange={e => setFiles([...e.target.files])} />
+        <input type="file" multiple accept=".dxf" onChange={e => setFiles([...e.target.files])} disabled={loading} />
       </div>
 
-      <button className="upload-btn" onClick={handleUpload}>Upload DXF</button>
+      <button className="upload-btn" onClick={handleUpload} disabled={loading}>
+        {loading ? 'Uploading...' : 'Upload DXF'}
+      </button>
 
       {message && <p className="feedback">{message}</p>}
     </div>
