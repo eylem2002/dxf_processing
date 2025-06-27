@@ -23,3 +23,7 @@ This project provides a web-based interface and backend API for uploading, proce
 - Python 3.10+
 - Node.js 18+
 - npm or yarn
+
+  
+### Running the Application
+To run the project locally, start by launching the backend server. Navigate to the backend folder, activate your Python environment, and run the FastAPI server using a command such as uvicorn app.main:app --reload. This will start the backend API, usually accessible at http://localhost:8000. Next, open a new terminal window, go to the frontend folder, and start the React development server by running npm start. The frontend will launch in your default browser at http://localhost:3000. Make sure both the backend and frontend servers are running simultaneously to use the full functionality of the application.
