@@ -39,6 +39,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Set, Optional
 from app.controllers.dxf_controller import DxfController
+from fastapi import Query
+from app.config import EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
 
 router = APIRouter()
 
@@ -59,15 +61,29 @@ class ExportParams(BaseModel):
 @router.post("/process_dxf/")
 async def process_dxf(
     files: List[UploadFile] = File(...),
+    dpi: int = Query(300, description="DPI for rendering, default 300"),
+    keywords: Optional[str] = Query(None, description="Comma-separated keywords to include"),
+    blacklist: Optional[str] = Query(None, description="Comma-separated blacklist strings"),
+    excluded_layer_names: Optional[str] = Query(None, description="Comma-separated layer names to exclude"),
     params: ProcessDxfParams = Depends()
 ):
+    keyword_list = keywords.split(",") if keywords else list(KEYWORDS)
+    blacklist_list = blacklist.split(",") if blacklist else list(BLACKLIST)
+    excluded_set = set(excluded_layer_names.split(",")) if excluded_layer_names else set(EXCLUDED_LAYER_NAMES)
+    
+    params = {
+        "dpi": dpi,
+        "keywords": keyword_list,
+        "blacklist": blacklist_list,
+        "excluded_layer_names": excluded_set,
+    }
     """
     Upload and process a DXF file, return a floor_plan_id.
     """
     try:
         plan_ids = []
         for file in files:
-            plan_id = await DxfController.process_request(file, params.dict())
+            plan_id = await DxfController.process_request(file, params)
             plan_ids.append(plan_id)  
         return {"floor_plan_ids": plan_ids}
     except Exception as e:
