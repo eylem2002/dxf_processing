@@ -72,7 +72,8 @@ class DxfController:
         keywords: list[str],
         blacklist: list[str],
         excluded_layer_names: set[str],
-        dpi: int
+        dpi: int,
+        plan_id: str
     ) -> str:
         """
         Process a DXF file to extract categorized floor plan images and store related metadata.
@@ -107,7 +108,7 @@ class DxfController:
         metadata: dict[str, list[str]] = {}
         
         # Save floor plan early to get ID
-        plan_id = uuid.uuid4().hex
+        # plan_id = uuid.uuid4().hex
         base_folder = OUTPUT_DIR / f"floor_pngs_{plan_id}"
         base_folder.mkdir(parents=True, exist_ok=True)
 
@@ -176,7 +177,8 @@ class DxfController:
     @staticmethod
     async def process_request(file: UploadFile, params: dict) -> str:
         ext = Path(file.filename).suffix
-        safe_name = f"{uuid.uuid4().hex}{ext}"
+        plan_id = uuid.uuid4().hex 
+        safe_name = f"{plan_id}{ext}"
         temp_path = UPLOAD_DIR / safe_name
         content = await file.read()
         temp_path.write_bytes(content)
@@ -191,7 +193,8 @@ class DxfController:
             keywords=keywords,
             blacklist=blacklist,
             excluded_layer_names=excluded,
-            dpi=dpi_value
+            dpi=dpi_value,
+            plan_id=plan_id 
         )
 
     @staticmethod
