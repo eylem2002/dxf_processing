@@ -175,7 +175,9 @@ class DxfController:
     # --------------------------- API Process ---------------------------------------------#
     @staticmethod
     async def process_request(file: UploadFile, params: dict) -> str:
-        temp_path = UPLOAD_DIR / file.filename
+        ext = Path(file.filename).suffix
+        safe_name = f"{uuid.uuid4().hex}{ext}"
+        temp_path = UPLOAD_DIR / safe_name
         content = await file.read()
         temp_path.write_bytes(content)
 
