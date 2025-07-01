@@ -103,7 +103,7 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
 
       setMessage('Upload and linking successful.');
       setFiles([]); // Clear selected files after success
-      onUploadSuccess();
+      onUploadSuccess(planIds);
     } catch (err) {
       console.error(err);
       setMessage('Upload failed. Please check console or backend logs.');
