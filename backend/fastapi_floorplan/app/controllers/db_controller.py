@@ -113,3 +113,28 @@ class DbController:
         return result
 
 
+    @staticmethod
+    def get_all_keywords_tree() -> dict:
+        session = SessionLocal()
+        records = session.query(FloorPlan.metadata_json).all()
+        session.close()
+
+        keyword_tree = {}
+
+        for record in records:
+            metadata = record[0]  # since `records` is list of tuples
+            if not metadata:
+                continue
+            for keyword, files in metadata.items():
+                if keyword not in keyword_tree:
+                    keyword_tree[keyword] = set()
+                keyword_tree[keyword].update(files)
+
+        # Convert to hierarchical tree format
+        tree = {"name": "root", "children": []}
+        for keyword, files in keyword_tree.items():
+            tree["children"].append({
+                "name": keyword,
+                "children": list(files)
+            })
+        return tree
