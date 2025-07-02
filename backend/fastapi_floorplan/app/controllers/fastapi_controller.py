@@ -51,6 +51,9 @@ from typing import List, Set, Optional
 from app.controllers.dxf_controller import DxfController
 from fastapi import Query
 from app.config import EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
+from app.models import KeywordTree 
+
+
 
 router = APIRouter()
 
@@ -154,15 +157,14 @@ def get_dxfs_for_project(project_id: str):
         return DbController.get_project_floorplans(project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@router.get("/api/keywords/tree")
+
+@router.get(
+    "/api/keywords/tree",
+    response_model=KeywordTree,
+    summary="Get hierarchical list of available keywords"
+)
 def get_keywords_tree():
-    """
-    Extract and return all keywords in a nested tree structure
-    from floor plan metadata.
-    """
     try:
-        tree = DbController.get_all_keywords_tree()
-        return tree
+        return DbController.get_all_keywords_tree()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to build keyword tree: {str(e)}")
+        raise HTTPException(500, f"Failed to build keyword tree: {e}")

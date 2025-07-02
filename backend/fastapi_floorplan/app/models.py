@@ -60,4 +60,13 @@ class LinkRequest(BaseModel):
     floor_plan_id: str
     
     
-    
+class KeywordNode(BaseModel):
+    dataset_hash: str    # the floor_plan_id
+    category: str        # "ROOF"
+    display_name: str    # "ROOF/A-ROOF 04"
+    filename: str        # "A-ROOF 04.layer-…png"
+    path: str            # the relative path in the output dir
+
+class KeywordTree(BaseModel):
+    name: str
+    children: List[KeywordNode]

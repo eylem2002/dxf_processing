@@ -24,6 +24,7 @@ from sqlalchemy.orm import sessionmaker
 from app.config import SQLALCHEMY_DATABASE_URL
 from app.models import Base, FloorPlan, ProjectDxfLink
 import uuid
+from pathlib import Path
 
 # Create the SQLAlchemy engine (echo=True for SQL logging)
 engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=True)
@@ -116,25 +117,31 @@ class DbController:
     @staticmethod
     def get_all_keywords_tree() -> dict:
         session = SessionLocal()
-        records = session.query(FloorPlan.metadata_json).all()
+        # pull both the plan ID and its metadata JSON
+        records = session.query(FloorPlan.id, FloorPlan.metadata_json).all()
         session.close()
 
-        keyword_tree = {}
+        tree: dict = {"name": "root", "children": []}
 
-        for record in records:
-            metadata = record[0]  # since `records` is list of tuples
+        for plan_id, metadata in records:
             if not metadata:
                 continue
-            for keyword, files in metadata.items():
-                if keyword not in keyword_tree:
-                    keyword_tree[keyword] = set()
-                keyword_tree[keyword].update(files)
 
-        # Convert to hierarchical tree format
-        tree = {"name": "root", "children": []}
-        for keyword, files in keyword_tree.items():
-            tree["children"].append({
-                "name": keyword,
-                "children": list(files)
-            })
+            for category, rel_paths in metadata.items():
+                for rel in rel_paths:
+                    p = Path(rel)
+                    filename = p.name
+                    # strip the “.layer-<id>.png” or “.block-<id>.png” suffix for display
+                    display_core = filename.rsplit(f".layer-{plan_id}.png", 1)[0] \
+                                .rsplit(f".block-{plan_id}.png", 1)[0]
+                    display_name = f"{category}/{display_core}"
+
+                    tree["children"].append({
+                        "dataset_hash": plan_id,
+                        "category": category,
+                        "display_name": display_name,
+                        "filename": filename,
+                        "path": rel
+                    })
+
         return tree
