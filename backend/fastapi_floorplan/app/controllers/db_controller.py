@@ -2,22 +2,24 @@
 # db_controller.py
 # ------------------------------------------------------------
 # Module: DbController
-# Description:
-#   - Configures SQLAlchemy engine and session factory
-#   - Ensures the `floor_plans` table exists in the MySQL database
-#   - Provides methods to save and retrieve floor plan data
+# 
+# Provides database persistence for DXF floor plans.
+# 
+# Responsibilities:
+#   1. Configure SQLAlchemy engine & session factory
+#   2. Ensure ORM models (tables) exist in the database
+#   3. Save new floor plan records with metadata
+#   4. Retrieve floor plan data by plan ID
+#   5. Link floor plans to projects
+#   6. List all floor plans associated with a project
+#   7. Build a keyword tree of all saved floor-plan images for frontend display
 # 
 # Public Classes:
 #   - DbController: Static methods for database operations
 # 
 # Dependencies:
 #   - sqlalchemy: Core and ORM for database interactions
-#   - uuid: To generate unique identifiers for floor plans
-# 
-# Usage:
-#   from app.controllers.db_controller import DbController
-#   plan_id = DbController.save_floor_plan(keyword, paths, metadata)
-#   data = DbController.get_floors(plan_id)
+#   - uuid: To generate unique identifiers for images in keyword tree
 # ------------------------------------------------------------
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -37,26 +39,30 @@ Base.metadata.create_all(bind=engine)
 
 
 class DbController:
+    """
+    Static methods to interact with the database for floor plan records.
+    """
+
     @staticmethod
     def save_floor_plan_with_id(plan_id: str, keyword: str, relative_paths: list[str], metadata: dict) -> str:
         """
-        Save a new floor plan record to the database.
+        Insert a new floor plan into the database.
 
         Args:
-            keyword (str): The floor category keyword (e.g., 'GROUND').
-            relative_paths (list[str]): List of relative file paths for PNGs.
-            metadata (dict): JSON-serializable dict mapping categories to file lists.
+            plan_id (str): Unique identifier for the floor plan.
+            keyword (str): Primary category keyword for this plan (e.g., 'GROUND').
+            relative_paths (list[str]): List of relative PNG file paths.
+            metadata (dict): Mapping of keywords to lists of file paths.
 
         Returns:
-            str: Generated UUID for the saved floor plan.
+            str: The provided plan_id for reference.
         """
         session = SessionLocal()
-        # plan_id = uuid.uuid4().hex
         fp = FloorPlan(
-        id=plan_id,
-        keyword=keyword,
-        relative_path=",".join(relative_paths),
-        metadata_json=metadata  
+            id=plan_id,
+            keyword=keyword,
+            relative_path=",".join(relative_paths),
+            metadata_json=metadata
         )
         session.add(fp)
         session.commit()
@@ -66,13 +72,14 @@ class DbController:
     @staticmethod
     def get_floors(plan_id: str) -> dict:
         """
-        Retrieve floor plan details for a given plan ID.
+        Retrieve a saved floor plan record by its ID.
 
         Args:
             plan_id (str): UUID of the floor plan record.
 
         Returns:
-            dict: Floor plan data including id, keyword, paths, metadata, and timestamp,
+            dict: Floor plan data including id, keyword,
+                  paths, metadata, and creation timestamp,
                   or empty dict if not found.
         """
         session = SessionLocal()
@@ -84,13 +91,19 @@ class DbController:
             "id": fp.id,
             "keyword": fp.keyword,
             "paths": fp.relative_path.split(","),
-            "metadata": fp.metadata_json,    
+            "metadata": fp.metadata_json,
             "created_at": str(fp.created_at)
         }
-     
-     
+
     @staticmethod
     def link_floor_to_project(project_id: str, plan_id: str):
+        """
+        Create an association between a floor plan and a project.
+
+        Args:
+            project_id (str): Identifier for the project.
+            plan_id (str): Identifier for the floor plan.
+        """
         session = SessionLocal()
         link = ProjectDxfLink(project_id=project_id, floor_plan_id=plan_id)
         session.add(link)
@@ -98,7 +111,17 @@ class DbController:
         session.close()
 
     @staticmethod
-    def get_project_floorplans(project_id: str):
+    def get_project_floorplans(project_id: str) -> list[dict]:
+        """
+        List all floor plans linked to a given project.
+
+        Args:
+            project_id (str): Identifier for the project.
+
+        Returns:
+            list[dict]: List of floor plan summaries (id, keyword,
+                        paths, created_at).
+        """
         session = SessionLocal()
         links = session.query(ProjectDxfLink).filter_by(project_id=project_id).all()
         result = []
@@ -113,11 +136,16 @@ class DbController:
         session.close()
         return result
 
-
     @staticmethod
     def get_all_keywords_tree() -> dict:
+        """
+        Build a flat tree of all saved floor-plan images,
+        suitable for frontend hierarchical display.
+
+        Returns:
+            dict: { name: "root", children: [ ... ] }
+        """
         session = SessionLocal()
-        # pull both the plan ID and its metadata JSON
         records = session.query(FloorPlan.id, FloorPlan.metadata_json).all()
         session.close()
 
@@ -126,22 +154,25 @@ class DbController:
         for plan_id, metadata in records:
             if not metadata:
                 continue
-
             for category, rel_paths in metadata.items():
                 for rel in rel_paths:
                     p = Path(rel)
                     filename = p.name
-                    # strip the “.layer-<id>.png” or “.block-<id>.png” suffix for display
-                    display_core = filename.rsplit(f".layer-{plan_id}.png", 1)[0] \
-                                .rsplit(f".block-{plan_id}.png", 1)[0]
-                    display_name = f"{category}/{display_core}"
-
+                    # strip suffix for display
+                    core = filename
+                    for suf in (f".block-{plan_id}.png", f".layer-{plan_id}.png"):
+                        if core.endswith(suf):
+                            core = core[:-len(suf)]
+                            break
+                    display_name = f"{category}/{core}"
+                    # generate a unique id per image for frontend use
+                    image_id = uuid.uuid4().hex
                     tree["children"].append({
+                        "id": image_id,
                         "dataset_hash": plan_id,
                         "category": category,
                         "display_name": display_name,
                         "filename": filename,
                         "path": rel
                     })
-
         return tree

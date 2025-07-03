@@ -1,99 +1,189 @@
 # ------------------------------------------------------------------------------
-# DXF Floor Plan API Controller
+# fastapi_controller.py
 #
-# This module defines the FastAPI routes for interacting with the DXF floor plan
-# processing service. It acts as the interface between HTTP clients and the 
-# DxfController logic.
+# Defines the FastAPI routes for the DXF Floor Plan service.
+# This module is responsible solely for handling HTTP requests/responses
+# and parameter extraction; it delegates all DXF parsing, rendering,
+# metadata management, and keyword scanning to DxfController.
 #
-# Endpoints:
+# Registered endpoints:
 #
-# 1. POST /process_dxf/
-#    - Description: Uploads a DXF file and optional processing parameters.
-#    - Action: Passes file and params to DxfController for processing.
-#    - Returns: A generated floor_plan_id.
+# 1• POST  /process_dxf/
+#     - Upload one or more DXF files for temporary storage.
+#     - Returns: Map of temp IDs → file paths, plus available keywords.
 #
-# 2. GET /floors/{plan_id}
-#    - Description: Retrieves metadata for a previously processed DXF floor plan.
-#    - Returns: Metadata including image paths, floor keywords, and timestamps.
+# 2• POST  /preview_from_selection/
+#     - Generate previews (PNG) for a given temp DXF + selected filters.
+#     - Returns: preview_id, metadata, and image URLs (no DB write).
 #
-# 3. POST /export/
-#    - Description: Copies a selected image view from the DXF output.
-#    - Action: Exports the specified image to data/jobs/{floor_id}/selected_output.
-#    - Returns: Absolute path to the exported image.
+# 3• POST  /store_from_selection/
+#     - Persist user-selected preview images into the DB and link to a project.
+#     - Returns: new floor_plan_id.
 #
-# 4. GET /floor-plans/{floor_plan_id}/images
-#    - Description: Lists all images exported for a given floor_plan_id.
-#    - Returns: A list of image metadata (image_id and filename).
+# 4• GET   /floors/{plan_id}
+#     - Retrieve metadata for a stored floor plan (images, keyword, timestamp).
 #
-# 5. GET /images/{image_id}
-#    - Description: Serves a previously exported image by its image_id.
-#    - Returns: FileResponse with image content (PNG/JPEG).
+# 5• POST  /export/
+#     - Copy one exported floor-plan image to a “selected_output” job folder.
+#     - Returns: absolute path of the copied image.
 #
-# 6. POST /link_dxf_to_project/
-#    - Description: Links a processed DXF floor plan to a project.
-#    - Action: Associates the given project_id with the specified floor_plan_id in the DB.
-#    - Returns: A success message on completion.
+# 6• GET   /floor-plans/{floor_plan_id}/images
+#     - List all exported images for a given floor_plan_id (IDs + filenames).
 #
-# 7. GET /projects/{project_id}/dxfs
-#    - Description: Retrieves all floor plans linked to a given project_id.
-#    - Returns: A list of floor plan metadata.
+# 7• GET   /images/{image_id}
+#     - Serve a previously exported image by its unique image_id.
 #
+# 8• POST  /link_dxf_to_project/
+#     - Link an existing floor_plan to a project.
+#     - Returns: success message.
+#
+# 9• GET   /projects/{project_id}/dxfs
+#     - List all floor plans linked to a given project_id.
+#
+# 10• GET   /api/keywords/tree
+#     - Build and return a flat “tree” of all saved floor-plan images.
+#
+# 11• POST  /generate_from_selection/
+#     - Process a temp DXF with given keywords/params, save result, and return new ID.
+#
+# 12• GET   /extract_keywords/
+#     - Scan a temp DXF for which KEYWORDS appear (blocks, layers, entity layers).
 # ------------------------------------------------------------------------------
+import uuid
+from pathlib import Path
+from typing import List
+from ezdxf import readfile
 
-
-
-from app.controllers.db_controller import DbController
-from app.models import ExportParams, LinkRequest, ProcessDxfParams
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import List, Set, Optional
+
+from app.config import UPLOAD_DIR, EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
+from app.controllers.db_controller import DbController
 from app.controllers.dxf_controller import DxfController
-from fastapi import Query
-from app.config import EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
+from app.models import ExportParams, LinkRequest, KeywordTree
 from app.models import KeywordTree 
-
-
 
 router = APIRouter()
 
-
 @router.post("/process_dxf/")
-async def process_dxf(
-    files: List[UploadFile] = File(...),
-    dpi: int = Query(300, description="DPI for rendering, default 300"),
-    keywords: Optional[str] = Query(None, description="Comma-separated keywords to include"),
-    blacklist: Optional[str] = Query(None, description="Comma-separated blacklist strings"),
-    excluded_layer_names: Optional[str] = Query(None, description="Comma-separated layer names to exclude"),
-    params: ProcessDxfParams = Depends()
-):
-    keyword_list = keywords.split(",") if keywords else list(KEYWORDS)
-    blacklist_list = blacklist.split(",") if blacklist else list(BLACKLIST)
-    excluded_set = set(excluded_layer_names.split(",")) if excluded_layer_names else set(EXCLUDED_LAYER_NAMES)
-    
-    params = {
-        "dpi": dpi,
-        "keywords": keyword_list,
-        "blacklist": blacklist_list,
-        "excluded_layer_names": excluded_set,
-    }
+async def upload_file(files: List[UploadFile] = File(...)):
     """
-    Upload and process a DXF file, return a floor_plan_id.
+    Upload DXF files temporarily, then scan the first file for matching KEYWORDS.
+    Delegates file saving and scanning to DxfController.process_request().
+    Returns temp file map and available keywords.
+    """
+    temp_dir = UPLOAD_DIR / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    file_map: dict[str,str] = {}
+    for f in files:
+        ext = Path(f.filename).suffix
+        tid = uuid.uuid4().hex
+        p = temp_dir / f"{tid}{ext}"
+        content = await f.read()
+        p.write_bytes(content)
+        file_map[tid] = str(p)
+
+    # pick the first file's path
+    first_path = Path(next(iter(file_map.values())))
+
+    # now scan that DXF for our keywords
+    doc = readfile(str(first_path))
+    msp = doc.modelspace()
+
+    found: set[str] = set()
+    # scan blocks
+    for blk in doc.blocks:
+        name = blk.name.upper()
+        if any(b in name for b in BLACKLIST):
+            continue
+        for k in KEYWORDS:
+            if k in name:
+                found.add(k)
+    # scan layers + entity layers
+    layer_names = {lay.dxf.name.upper() for lay in doc.layers}
+    entity_layers = {
+        getattr(e.dxf, "layer", "").upper()
+        for e in msp if hasattr(e.dxf, "layer")
+    }
+    for nm in layer_names.union(entity_layers):
+        if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
+            continue
+        for k in KEYWORDS:
+            if k in nm:
+                found.add(k)
+
+    return {
+      "temp_files": file_map,
+      "available_keywords": sorted(found)
+    }
+
+@router.post("/preview_from_selection/")
+def preview_from_selection(params: dict):
+    """
+    Generate preview PNGs from a temp DXF without persisting to the DB.
+    Delegates rendering logic to DxfController.preview().
+    Returns preview_id, metadata dict, and image URLs for frontend display.
     """
     try:
-        plan_ids = []
-        for file in files:
-            plan_id = await DxfController.process_request(file, params)
-            plan_ids.append(plan_id)  
-        return {"floor_plan_ids": plan_ids}
+        preview_id = uuid.uuid4().hex
+        file_path = Path(params["temp_path"])
+
+        metadata, rel_paths = DxfController.preview(
+            file_path=file_path,
+            keywords=params.get("keywords", list(KEYWORDS)),
+            blacklist=params.get("blacklist", list(BLACKLIST)),
+            excluded_layer_names=set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES)),
+            dpi=params.get("dpi", DPI),
+            plan_id=preview_id
+        )
+
+        urls = [f"/static/{p}" for p in rel_paths]
+        return {"preview_id": preview_id, "metadata": metadata, "image_urls": urls}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(500, detail=str(e))
+
+
+@router.post("/store_from_selection/")
+def store_from_selection(params: dict):
+    """
+    Persist selected preview images into the database and link to a project.
+    Calls DbController.save_floor_plan_with_id() and link_floor_to_project().
+    Returns the new floor_plan_id.
+    """
+    pid     = params["preview_id"]
+    project = params["project_id"]
+    sel     = params["selected_paths"]
+
+    # Group by category = the 2nd segment of the path
+    metadata: dict[str, list[str]] = {}
+    for rel in sel:
+        # rel looks like "floor_pngs_<plan_id>/KEYWORD/…"
+        parts = rel.split("/", 2)
+        # parts == ["floor_pngs_<plan_id>", "KEYWORD", "rest/of/file.png"]
+        category = parts[1]    # ← grab index 1, not 0
+        metadata.setdefault(category, []).append(rel)
+
+    primary = next(iter(metadata))
+    flat = [p for paths in metadata.values() for p in paths]
+
+    DbController.save_floor_plan_with_id(
+        plan_id=pid,
+        keyword=primary,
+        relative_paths=flat,
+        metadata=metadata
+    )
+    DbController.link_floor_to_project(project, pid)
+
+    return {"floor_plan_id": pid}
 
 
 @router.get("/floors/{plan_id}")
 def get_floors(plan_id: str):
     """
-    Retrieve stored floor-plan metadata by its unique ID.
+    Retrieve stored floor-plan metadata by plan_id.
+    Delegates to DxfController.get_floor_metadata().
     """
     try:
         return DxfController.get_floor_metadata(plan_id)
@@ -104,7 +194,9 @@ def get_floors(plan_id: str):
 @router.post("/export/")
 def export_floor(params: ExportParams):
     """
-    Copy a selected floor plan image and return its absolute path.
+    Copy a selected floor-plan image to the jobs selected_output folder.
+    Delegates to DxfController.export_floor_image().
+    Returns the absolute exported path.
     """
     try:
         path = DxfController.export_floor_image(params.dict())
@@ -118,7 +210,8 @@ def export_floor(params: ExportParams):
 @router.get("/floor-plans/{floor_plan_id}/images")
 def list_exported_images(floor_plan_id: str):
     """
-    List all exported floor plan images for a given floor_plan_id.
+    List all exported images (IDs + filenames) for a given floor_plan_id.
+    Delegates to DxfController.list_exported_images().
     """
     try:
         return DxfController.list_exported_images(floor_plan_id)
@@ -129,18 +222,20 @@ def list_exported_images(floor_plan_id: str):
 @router.get("/images/{image_id}")
 def get_image_by_id(image_id: str):
     """
-    Retrieve a specific exported image file by its image_id.
+    Serve an exported image by its unique image_id.
+    Delegates to DxfController.get_image_file_by_id().
     """
     try:
         return DxfController.get_image_file_by_id(image_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    
-    
+
+
 @router.post("/link_dxf_to_project/")
 def link_dxf_to_project(link: LinkRequest):
     """
-    Links a specific floor plan (DXF) to a given project using project and floor plan IDs.    
+    Link an existing floor plan to a project.
+    Uses DbController.link_floor_to_project().
     """
     try:
         DbController.link_floor_to_project(link.project_id, link.floor_plan_id)
@@ -148,15 +243,19 @@ def link_dxf_to_project(link: LinkRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/projects/{project_id}/dxfs")
 def get_dxfs_for_project(project_id: str):
     """
-    Retrieves all floor plans (DXFs) linked to the specified project ID.   
+    Retrieve all floor plans linked to a specific project_id.
+    Uses DbController.get_project_floorplans().
     """
     try:
         return DbController.get_project_floorplans(project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @router.get(
     "/api/keywords/tree",
@@ -164,7 +263,46 @@ def get_dxfs_for_project(project_id: str):
     summary="Get hierarchical list of available keywords"
 )
 def get_keywords_tree():
+    """
+    Build and return a flat “tree” of all floor-plan images across saved plans.
+    Delegates to DbController.get_all_keywords_tree().
+    """
     try:
         return DbController.get_all_keywords_tree()
     except Exception as e:
         raise HTTPException(500, f"Failed to build keyword tree: {e}")
+    
+    
+@router.post("/generate_from_selection/")
+def generate_from_selection(params: dict):
+    """
+    Process a temp DXF with selected filters, persist to DB, and return new ID.
+    Delegates to DxfController.process().
+    """
+    try:
+        plan_id = uuid.uuid4().hex
+        file_path = Path(params["temp_path"])
+        new_plan_id = DxfController.process(
+            file_path=file_path,
+            keywords=params.get("keywords", list(KEYWORDS)),
+            blacklist=params.get("blacklist", list(BLACKLIST)),
+            excluded_layer_names=set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES)),
+            dpi=params.get("dpi", DPI),
+            plan_id=plan_id
+        )
+        return {"floor_plan_id": new_plan_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/extract_keywords/")
+def extract_keywords(temp_path: str):
+    """
+    Scan a temp DXF for which KEYWORDS appear (blocks, layers, entity layers).
+    Delegates to DxfController.extract_keywords().
+    """
+    try:
+        # Delegate the scanning logic to DxfController.extract_keywords()
+        return DxfController.extract_keywords(Path(temp_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

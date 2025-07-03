@@ -1,70 +1,103 @@
-"""
-DxfController Module
-
-This module handles the full pipeline of extracting and storing floor plan views from DXF files.
-It performs the following responsibilities:
-
-1. **DXF Parsing & Filtering**:
-   - Loads a DXF file using `ezdxf`, and accesses both its blocks and layers.
-   - Filters blocks and layers based on specified `keywords`, `blacklist`, and `excluded_layer_names`.
-
-2. **Image Rendering**:
-   - For each valid block or layer, a PNG image is generated using the `ezdxf` matplotlib addon (`ezplt.qsave`).
-   - PNG filenames follow the pattern:
-     - `BLOCKNAME.block-<floor_plan_id>.png`
-     - `LAYERNAME.layer-<floor_plan_id>.png`
-   - All images are grouped under a dedicated directory:
-     - `floor_pngs_<floor_plan_id>/KEYWORD/`
-
-3. **Deduplication**:
-   - Uses MD5 hashing to avoid saving duplicate rendered images.
-
-4. **Metadata Management**:
-   - Creates a JSON metadata file named `metadata-<floor_plan_id>.json` inside the floor_pngs folder.
-   - Metadata maps each keyword to a list of relative image paths.
-
-5. **Database Integration**:
-   - Persists the extracted floor plan record using `DbController.save_floor_plan_with_id(...)`
-   - Records include: `plan_id`, primary `keyword`, list of PNG image paths, and full metadata.
-
-6. **API Integration Helpers**:
-   - `process_request()`: Asynchronous entry point for FastAPI file uploads.
-   - `get_floor_metadata()`: Retrieves metadata by floor plan ID.
-   - `export_floor_image()`: Copies a selected image to a `/jobs/.../selected_output` export folder.
-   - `list_exported_images()`: Lists exported images for a given floor plan ID.
-   - `get_image_file_by_id()`: Retrieves a specific exported image file by filename stem (ID).
-
-Dependencies:
-- `ezdxf`, `matplotlib` for rendering
-- `hashlib`, `uuid`, `pathlib` for file handling
-- `json` for metadata
-- `DbController` for database persistence
-- `FastAPI`, `UploadFile`, and `FileResponse` for I/O and HTTP interaction
-"""
-
+# ------------------------------------------------------------------------------
+# DxfController Module
+#
+# Orchestrates the full DXF → PNG pipeline, then delegates persistence to DbController.
+# Responsibilities:
+#   1. DXF Parsing & Filtering:
+#        • Load DXF via ezdxf
+#        • Identify only “floorplan” geometry (lines, polylines, arcs, etc.)
+#   2. Image Rendering:
+#        • Render each matching BLOCK and LAYER to PNG via ezplt.qsave
+#        • Force a strict black-on-white palette for clarity
+#   3. Deduplication:
+#        • Hash each PNG to avoid duplicates
+#   4. Metadata Management:
+#        • Collect relative paths by keyword into a JSON file
+#   5. Database Integration:
+#        • Save plan record and its metadata via DbController
+#   6. Keyword Extraction Helper:
+#        • Standalone scan of a DXF’s blocks & layers for available keywords
+#
+# Exposed static methods:
+#   • process           — full-run: DXF → PNGs → JSON → DB
+#   • preview           — DXF → PNGs → JSON (no DB)
+#   • process_request   — FastAPI helper wrapping process()
+#   • extract_keywords  — FastAPI helper to scan keywords only
+#   • get_floor_metadata, export_floor_image,
+#     list_exported_images, get_image_file_by_id — API integration helpers
+#
+# Dependencies:
+#   - ezdxf, matplotlib (ezplt) for rendering
+#   - PIL for enforcing B/W
+#   - hashlib, uuid for file hashing & IDs
+#   - DbController for persistence
+#   - FastAPI types for API integration
+# ------------------------------------------------------------------------------
 import hashlib
-import json,sys
+import json
 from pathlib import Path
 import uuid
 import ezdxf
 from ezdxf.addons.drawing import matplotlib as ezplt
-from app.config import UPLOAD_DIR, KEYWORDS, BLACKLIST, EXCLUDED_LAYER_NAMES, DPI, cfg,OUTPUT_DIR,BASE_DIR
-from app.controllers.db_controller import DbController
-from fastapi import  UploadFile
-import shutil
-from typing import List, Set, Optional
-from fastapi.responses import FileResponse
-import mimetypes
+from PIL import Image
 
+from app.config import (
+    UPLOAD_DIR,
+    KEYWORDS,
+    BLACKLIST,
+    EXCLUDED_LAYER_NAMES,
+    DPI,
+    cfg,
+    OUTPUT_DIR,
+    BASE_DIR,
+)
+from app.controllers.db_controller import DbController
+from fastapi import UploadFile, HTTPException
+from fastapi.responses import FileResponse
+import shutil
+import mimetypes
 
 
 class DxfController:
     """
-    DxfController
-
-    Provides methods to process DXF files into categorized floor-plan
-    images and save corresponding metadata to the database.
+    Central controller for DXF processing:
+      • Rendering
+      • Metadata generation
+      • Database persistence
+      • API-facing helpers
     """
+
+    @staticmethod
+    def force_black_on_white(png_path: Path):
+        """
+        Re-open the PNG at `png_path`, convert to pure B/W:
+        • Every pixel ≠ white becomes black.
+        • Saves back to the same file.
+        """
+        img = Image.open(png_path).convert("RGB")
+        pixels = img.getdata()
+        new_pixels = [
+            (0, 0, 0) if pixel != (255, 255, 255) else (255, 255, 255)
+            for pixel in pixels
+        ]
+        img.putdata(new_pixels)
+        img.save(png_path)
+
+    @staticmethod
+    def is_floorplan_geometry(entity) -> bool:
+        """
+        True for DXF entities that form floorplan outlines:
+        LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE.
+        """
+        return entity.dxftype() in {
+            'LINE',
+            'LWPOLYLINE',
+            'POLYLINE',
+            'CIRCLE',
+            'ARC',
+            'ELLIPSE',
+            'SPLINE',
+        }
 
     @staticmethod
     def process(
@@ -76,39 +109,14 @@ class DxfController:
         plan_id: str
     ) -> str:
         """
-        Process a DXF file to extract categorized floor plan images and store related metadata.
-
-        Workflow:
-        1. Generate a unique floor_plan_id (UUID) to track this processing session.
-        2. Create a base output folder named `floor_pngs_<floor_plan_id>`.
-        3. Iterate over DXF blocks and layers:
-           - Filter using `keywords`, `blacklist`, and `excluded_layer_names`.
-           - Render each valid block or layer to a PNG file using ezdxf/ezplt.
-           - Name each file with a suffix `-<floor_plan_id>.png` for uniqueness.
-           - Skip duplicates using MD5 hash-based deduplication.
-        4. Save a metadata JSON file named `metadata-<floor_plan_id>.json` in the same folder.
-        5. Persist the floor plan record to the database via `DbController`.
-
-        Args:
-            file_path (Path): Path to the uploaded DXF file.
-            keywords (list[str]): Keywords to include in filtering (e.g., ["GROUND", "ROOF"]).
-            blacklist (list[str]): Names or substrings to exclude from processing.
-            excluded_layer_names (set[str]): Exact layer names to skip.
-            dpi (int): Image resolution in dots per inch for PNG rendering.
-
-        Returns:
-            str: The generated floor_plan_id (UUID) that identifies this floor plan.
+        Full-pipeline: DXF → PNGs → metadata JSON → DB record.
+        Returns the plan_id on success.
         """
-
-        # Load the DXF document
         doc = ezdxf.readfile(str(file_path))
         msp = doc.modelspace()
 
         exported_hashes: dict[str, str] = {}
         metadata: dict[str, list[str]] = {}
-        
-        # Save floor plan early to get ID
-        # plan_id = uuid.uuid4().hex
         base_folder = OUTPUT_DIR / f"floor_pngs_{plan_id}"
         base_folder.mkdir(parents=True, exist_ok=True)
 
@@ -116,21 +124,26 @@ class DxfController:
         for blk in doc.blocks:
             name_u = blk.name.upper()
             if any(k in name_u for k in keywords) and not any(b in name_u for b in blacklist):
-                keyword = next(k for k in keywords if k in name_u)
-                folder = base_folder / keyword
+                kw = next(k for k in keywords if k in name_u)
+                folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
-                
-                png_filename = f"{blk.name}.block-{plan_id}.png"
-                png_path = folder / png_filename
 
-                ezplt.qsave(blk, png_path, dpi=dpi, config=cfg)
+                png_path = folder / f"{blk.name}.block-{plan_id}.png"
+                ezplt.qsave(
+                    blk,
+                    png_path,
+                    dpi=dpi,
+                    config=cfg,
+                    filter_func=DxfController.is_floorplan_geometry
+                )
+                DxfController.force_black_on_white(png_path)
 
                 file_hash = hashlib.md5(png_path.read_bytes()).hexdigest()
                 if file_hash in exported_hashes:
                     png_path.unlink()
-                    continue
-                exported_hashes[file_hash] = png_path.name
-                metadata.setdefault(keyword, []).append(str(png_path.relative_to(OUTPUT_DIR)))
+                else:
+                    exported_hashes[file_hash] = png_path.name
+                    metadata.setdefault(kw, []).append(str(png_path.relative_to(OUTPUT_DIR)))
 
         # ----------------------------- LAYER PASS ----------------------------------- #
         for lay in doc.layers:
@@ -140,65 +153,68 @@ class DxfController:
                 and not any(b in name_u for b in blacklist)
                 and name_u not in excluded_layer_names
             ):
-                keyword = next(k for k in keywords if k in name_u)
-                folder = base_folder / keyword
+                kw = next(k for k in keywords if k in name_u)
+                folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
 
-                png_filename = f"{lay.dxf.name}.layer-{plan_id}.png"
-                png_path = folder / png_filename
-                
+                png_path = folder / f"{lay.dxf.name}.layer-{plan_id}.png"
                 ezplt.qsave(
                     msp,
                     png_path,
                     dpi=dpi,
                     config=cfg,
-                    filter_func=lambda e, layer=lay.dxf.name: e.dxf.layer == layer
+                    filter_func=lambda e, layer=lay.dxf.name: (
+                        DxfController.is_floorplan_geometry(e) and e.dxf.layer == layer
+                    )
                 )
+                DxfController.force_black_on_white(png_path)
 
                 file_hash = hashlib.md5(png_path.read_bytes()).hexdigest()
                 if file_hash in exported_hashes:
                     png_path.unlink()
-                    continue
-                exported_hashes[file_hash] = png_path.name
-                metadata.setdefault(keyword, []).append(str(png_path.relative_to(OUTPUT_DIR)))
+                else:
+                    exported_hashes[file_hash] = png_path.name
+                    metadata.setdefault(kw, []).append(str(png_path.relative_to(OUTPUT_DIR)))
 
         # --------------------------- METADATA FILE --------------------------------- #
-        meta_filename = f"metadata-{plan_id}.json"
-        meta_file = base_folder / meta_filename
+        meta_file = base_folder / f"metadata-{plan_id}.json"
         meta_file.write_text(json.dumps(metadata, indent=4))
 
         # --------------------------- DATABASE SAVE --------------------------------- #
-        primary_keyword = next(iter(metadata))
-        relative_paths = [p for paths in metadata.values() for p in paths]
-        # Pass the plan_id so DB stores it (since created it earlier)
-        DbController.save_floor_plan_with_id(plan_id, primary_keyword, relative_paths, metadata)
+        primary = next(iter(metadata))
+        flat_paths = [p for paths in metadata.values() for p in paths]
+        DbController.save_floor_plan_with_id(plan_id, primary, flat_paths, metadata)
         return plan_id
-    # --------------------------- API Process ---------------------------------------------#
+
     @staticmethod
     async def process_request(file: UploadFile, params: dict) -> str:
+        """
+        Asynchronous entry for FastAPI; saves temp file then delegates to process().
+        """
         ext = Path(file.filename).suffix
-        plan_id = uuid.uuid4().hex 
-        safe_name = f"{plan_id}{ext}"
-        temp_path = UPLOAD_DIR / safe_name
-        content = await file.read()
-        temp_path.write_bytes(content)
+        plan_id = uuid.uuid4().hex
+        temp_path = UPLOAD_DIR / f"{plan_id}{ext}"
+        temp_path.write_bytes(await file.read())
 
-        keywords = params.get("keywords") or list(KEYWORDS)
-        blacklist = params.get("blacklist") or list(BLACKLIST)
-        excluded = params.get("excluded_layer_names") or set(EXCLUDED_LAYER_NAMES)
-        dpi_value = params.get("dpi") or DPI
+        keywords = params.get("keywords", list(KEYWORDS))
+        blacklist = params.get("blacklist", list(BLACKLIST))
+        excluded = set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES))
+        dpi_value = params.get("dpi", DPI)
 
         return DxfController.process(
-            temp_path,
+            file_path=temp_path,
             keywords=keywords,
             blacklist=blacklist,
             excluded_layer_names=excluded,
             dpi=dpi_value,
-            plan_id=plan_id 
+            plan_id=plan_id
         )
 
     @staticmethod
-    def get_floor_metadata(plan_id: str):
+    def get_floor_metadata(plan_id: str) -> dict:
+        """
+        Retrieve stored floor-plan metadata from the DB.
+        """
         data = DbController.get_floors(plan_id)
         if not data:
             raise ValueError("Plan not found")
@@ -206,58 +222,156 @@ class DxfController:
 
     @staticmethod
     def export_floor_image(params: dict) -> str:
+        """
+        Copy a selected image view to a job folder and return its absolute path.
+        """
         record = DbController.get_floors(params["floor_id"])
         if not record:
             raise ValueError("Plan not found")
 
-        views = record.get("metadata", {}).get(params["floor"])
-        if not views or params["view_index"] < 0 or params["view_index"] >= len(views):
+        views = record.get("metadata", {}).get(params["floor"], [])
+        idx = params.get("view_index", -1)
+        if idx < 0 or idx >= len(views):
             raise ValueError("Invalid floor or view_index")
 
-        src_path = OUTPUT_DIR / views[params["view_index"]]
-        if not src_path.exists():
+        src = OUTPUT_DIR / views[idx]
+        if not src.exists():
             raise FileNotFoundError("Source image not found")
 
-        try:
-            job_dir = BASE_DIR / "data" / "jobs" / params["floor_id"] / "selected_output"
-            job_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            raise RuntimeError(f"Failed to create export directory: {e}")
-
-        dest_path = job_dir / src_path.name
-
-        try:
-            shutil.copy(src_path, dest_path)
-        except shutil.SameFileError:
-            # File already exists and is the same can ignore or log
-            pass
-        except OSError as e:
-            raise RuntimeError(f"Failed to copy image: {e}")
-
-        return str(dest_path)
+        dest_dir = BASE_DIR / "data" / "jobs" / params["floor_id"] / "selected_output"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / src.name
+        shutil.copy(src, dest)
+        return str(dest)
 
     @staticmethod
-    def list_exported_images(floor_plan_id: str):
+    def list_exported_images(floor_plan_id: str) -> list[dict]:
+        """
+        List all images exported for a given floor plan ID.
+        """
         export_dir = BASE_DIR / "data" / "jobs" / floor_plan_id / "selected_output"
         if not export_dir.exists():
             raise FileNotFoundError("Export directory not found")
-
-        image_files = [f for f in export_dir.iterdir() if f.suffix.lower() in [".jpg", ".jpeg", ".png"]]
         return [
-            {
-                "image_id": f.stem,
-                "image_name": f.name
-            } for f in image_files
+            {"image_id": f.stem, "image_name": f.name}
+            for f in export_dir.iterdir()
+            if f.suffix.lower() in {'.png', '.jpg', '.jpeg'}
         ]
 
     @staticmethod
-    def get_image_file_by_id(image_id: str):
+    def get_image_file_by_id(image_id: str) -> FileResponse:
+        """
+        Serve a previously exported image by its image_id.
+        """
         jobs_dir = BASE_DIR / "data" / "jobs"
         for plan_dir in jobs_dir.iterdir():
-            selected_output_dir = plan_dir / "selected_output"
-            if selected_output_dir.exists():
-                for img_file in selected_output_dir.glob("*"):
-                    if img_file.stem == image_id:
-                        mime_type, _ = mimetypes.guess_type(str(img_file))
-                        return FileResponse(img_file, media_type=mime_type)
+            sel_dir = plan_dir / "selected_output"
+            if sel_dir.exists():
+                for img in sel_dir.iterdir():
+                    if img.stem == image_id:
+                        mime, _ = mimetypes.guess_type(str(img))
+                        return FileResponse(img, media_type=mime)
         raise FileNotFoundError("Image not found")
+
+    @staticmethod
+    def preview(
+        file_path: Path,
+        keywords: list[str],
+        blacklist: list[str],
+        excluded_layer_names: set[str],
+        dpi: int,
+        plan_id: str
+    ) -> tuple[dict[str, list[str]], list[str]]:
+        """
+        Render only floorplan geometry to PNGs under OUTPUT_DIR/floor_pngs_<plan_id>
+        without writing to the DB (for preview).
+        """
+        doc = ezdxf.readfile(str(file_path))
+        msp = doc.modelspace()
+        metadata: dict[str, list[str]] = {}
+        base_folder = OUTPUT_DIR / f"floor_pngs_{plan_id}"
+        base_folder.mkdir(parents=True, exist_ok=True)
+
+        # ----------------------------- BLOCK PASS ----------------------------------- #
+        for blk in doc.blocks:
+            name_u = blk.name.upper()
+            if any(k in name_u for k in keywords) and not any(b in name_u for b in blacklist):
+                kw = next(k for k in keywords if k in name_u)
+                folder = base_folder / kw
+                folder.mkdir(parents=True, exist_ok=True)
+
+                out = folder / f"{blk.name}.block-{plan_id}.png"
+                ezplt.qsave(
+                    blk,
+                    out,
+                    dpi=dpi,
+                    config=cfg,
+                    filter_func=DxfController.is_floorplan_geometry
+                )
+                DxfController.force_black_on_white(out)
+                metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))
+
+        # ----------------------------- LAYER PASS ----------------------------------- #
+        for lay in doc.layers:
+            name_u = lay.dxf.name.upper()
+            if (
+                any(k in name_u for k in keywords)
+                and not any(b in name_u for b in blacklist)
+                and name_u not in excluded_layer_names
+            ):
+                kw = next(k for k in keywords if k in name_u)
+                folder = base_folder / kw
+                folder.mkdir(parents=True, exist_ok=True)
+
+                out = folder / f"{lay.dxf.name}.layer-{plan_id}.png"
+                ezplt.qsave(
+                    msp,
+                    out,
+                    dpi=dpi,
+                    config=cfg,
+                    filter_func=lambda e, layer=lay.dxf.name: (
+                        DxfController.is_floorplan_geometry(e) and e.dxf.layer == layer
+                    )
+                )
+                DxfController.force_black_on_white(out)
+                metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))
+
+        meta_file = base_folder / f"metadata-{plan_id}.json"
+        meta_file.write_text(json.dumps(metadata, indent=4))
+
+        rel_paths = [p for paths in metadata.values() for p in paths]
+        return metadata, rel_paths
+
+    @staticmethod
+    def extract_keywords(file_path: Path) -> list[str]:
+        """
+        Scan a DXF for our KEYWORDS. Returns a sorted list of matches.
+        """
+        doc = ezdxf.readfile(str(file_path))
+        msp = doc.modelspace()
+        found: set[str] = set()
+
+        # collect all block names
+        for blk in doc.blocks:
+            name = blk.name.upper()
+            if any(b in name for b in BLACKLIST):
+                continue
+            for k in KEYWORDS:
+                if k in name:
+                    found.add(k)
+
+        # collect all layer-style names
+        layer_names = {lay.dxf.name.upper() for lay in doc.layers}
+        entity_layers = {
+            getattr(e.dxf, "layer", "").upper()
+            for e in msp
+            if hasattr(e.dxf, "layer")
+        }
+        for nm in layer_names.union(entity_layers):
+            if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
+                continue
+            for k in KEYWORDS:
+                if k in nm:
+                    found.add(k)
+
+        return sorted(found)
