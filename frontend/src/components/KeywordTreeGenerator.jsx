@@ -4,7 +4,8 @@ import axios from 'axios';
 const KeywordTreeGenerator = ({
   tempPath,
   projectId,
-  availableKeywords,
+  blockKeywords = [],
+  layerKeywords = [],
   onComplete
 }) => {
   const [step, setStep] = useState(1);
@@ -139,32 +140,44 @@ const KeywordTreeGenerator = ({
         />
       </div>
 
-      <div style={{ margin: '20px 0' }}>
-        <label>Select Keywords:</label><br />
-        {!availableKeywords.length ? (
-          <em>No matching keywords found.</em>
-        ) : (
-          availableKeywords.map(kw => (
-            <button
-              key={kw}
-              onClick={() => toggleKeyword(kw)}
-              disabled={loading}
-              style={{
-                margin: 4,
-                padding: '6px 12px',
-                background: selectedKeywords.includes(kw)
-                  ? '#d4ffd4'
-                  : '#f0f0f0',
-                border: selectedKeywords.includes(kw)
-                  ? '2px solid green'
-                  : '1px solid #999',
-                borderRadius: 4
-              }}
-            >
-              {kw}
-            </button>
-          ))
-        )}
+            <div style={{ margin: '20px 0' }}>
+        <h4 style={{ marginBottom: 8 }}>Block Keywords</h4>
+        {blockKeywords.length === 0 && <em>None found in blocks.</em>}
+        {blockKeywords.map(kw => (
+          <button
+            key={`blk-${kw}`}
+            onClick={() => toggleKeyword(kw)}
+            disabled={loading}
+            style={{
+              margin: 4,
+              padding: '6px 12px',
+              background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
+              border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
+              borderRadius: 4
+            }}
+          >
+            {kw}
+          </button>
+        ))}
+
+        <h4 style={{ margin: '20px 8px 8px' }}>Layer Keywords</h4>
+        {layerKeywords.length === 0 && <em>None found in layers.</em>}
+        {layerKeywords.map(kw => (
+          <button
+            key={`lay-${kw}`}
+            onClick={() => toggleKeyword(kw)}
+            disabled={loading}
+            style={{
+              margin: 4,
+              padding: '6px 12px',
+              background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
+              border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
+              borderRadius: 4
+            }}
+          >
+            {kw}
+          </button>
+        ))}
       </div>
 
       <button

@@ -345,11 +345,15 @@ class DxfController:
     @staticmethod
     def extract_keywords(file_path: Path) -> list[str]:
         """
-        Scan a DXF for our KEYWORDS. Returns a sorted list of matches.
+         Scan a DXF for our KEYWORDS. Returns two sorted lists:
+         • block_keywords: from block names
+         • layer_keywords: from layer names or entity layers
         """
         doc = ezdxf.readfile(str(file_path))
         msp = doc.modelspace()
-        found: set[str] = set()
+       
+        block_found: set[str] = set()
+        layer_found: set[str] = set()
 
         # collect all block names
         for blk in doc.blocks:
@@ -358,7 +362,8 @@ class DxfController:
                 continue
             for k in KEYWORDS:
                 if k in name:
-                    found.add(k)
+                    
+                    block_found.add(k)
 
         # collect all layer-style names
         layer_names = {lay.dxf.name.upper() for lay in doc.layers}
@@ -372,6 +377,7 @@ class DxfController:
                 continue
             for k in KEYWORDS:
                 if k in nm:
-                    found.add(k)
+                    
+                    layer_found.add(k)
 
-        return sorted(found)
+        return {"block_keywords": sorted(block_found),"layer_keywords": sorted(layer_found),}

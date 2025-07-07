@@ -51,9 +51,12 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
       // setFiles([]);
       // onUploadSuccess(tempPath);
       const tempPath = tempMap[tempIds[0]];
-      const keywords = res.data.available_keywords || [];
+      // const keywords = res.data.available_keywords || [];
+       const blockKeywords = res.data.block_keywords || [];
+       const layerKeywords = res.data.layer_keywords || [];
       setFiles([]);
-      onUploadSuccess(tempPath, keywords);
+      // onUploadSuccess(tempPath, keywords);
+      onUploadSuccess(tempPath, blockKeywords, layerKeywords);
     } catch (err) {
       console.error(err);
       setMessage('Upload failed — check console.');

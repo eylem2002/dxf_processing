@@ -49,6 +49,7 @@
 # 12• GET   /extract_keywords/
 #     - Scan a temp DXF for which KEYWORDS appear (blocks, layers, entity layers).
 # ------------------------------------------------------------------------------
+import re
 import uuid
 from pathlib import Path
 from typing import List
@@ -91,15 +92,24 @@ async def upload_file(files: List[UploadFile] = File(...)):
     doc = readfile(str(first_path))
     msp = doc.modelspace()
 
-    found: set[str] = set()
+    # found: set[str] = set()
+    block_found: set[str] = set()
+    layer_found: set[str] = set()
     # scan blocks
     for blk in doc.blocks:
-        name = blk.name.upper()
-        if any(b in name for b in BLACKLIST):
-            continue
-        for k in KEYWORDS:
-            if k in name:
-                found.add(k)
+        #add code to filter only words with reg expression
+       if re.fullmatch(r"[A-Za-z]{3,}", blk.name):    # letters only, length ≥ 3
+            block_found.add(blk.name)
+            
+        # found.add(blk)
+        # name = blk.name.upper()
+        # if any(b in name for b in BLACKLIST):
+        #     continue
+        # for k in KEYWORDS:
+        #     if k in name:
+        #         found.add(k)
+        # if name in KEYWORDS:
+        #     found.add(name)
     # scan layers + entity layers
     layer_names = {lay.dxf.name.upper() for lay in doc.layers}
     entity_layers = {
@@ -107,15 +117,19 @@ async def upload_file(files: List[UploadFile] = File(...)):
         for e in msp if hasattr(e.dxf, "layer")
     }
     for nm in layer_names.union(entity_layers):
-        if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
-            continue
-        for k in KEYWORDS:
-            if k in nm:
-                found.add(k)
+        if re.fullmatch(r"[A-Za-z]{3,}", nm):    # letters only, length ≥ 3
+            layer_found.add(nm)
+        # found.add(k)
+        # if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
+        #     continue
+        # for k in KEYWORDS:
+        #     if k in nm:
+        #         found.add(k)
 
     return {
       "temp_files": file_map,
-      "available_keywords": sorted(found)
+       "block_keywords": sorted(block_found),
+       "layer_keywords": sorted(layer_found),
     }
 
 @router.post("/preview_from_selection/")

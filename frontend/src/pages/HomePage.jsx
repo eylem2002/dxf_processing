@@ -8,13 +8,17 @@ const HomePage = () => {
   const [step, setStep] = useState(1);
   const [projectId, setProjectId] = useState('');
   const [tempPath, setTempPath] = useState('');
-  const [availableKeywords, setAvailableKeywords] = useState([]);
+  // const [availableKeywords, setAvailableKeywords] = useState([]);
+  const [blockKeywords, setBlockKeywords] = useState([]);
+  const [layerKeywords, setLayerKeywords] = useState([]);
   const [planId, setPlanId] = useState('');
 
   // after upload: capture tempPath and keywords
-  const handleUploadSuccess = (path, keywords) => {
+  const handleUploadSuccess = (path,blocks, layers) => {
     setTempPath(path);
-    setAvailableKeywords(keywords);
+    setBlockKeywords(blocks);
+    setLayerKeywords(layers);
+    // setAvailableKeywords(keywords);
     setStep(2);
   };
 
@@ -56,7 +60,8 @@ const HomePage = () => {
         <KeywordTreeGenerator
           tempPath={tempPath}
           projectId={projectId}
-          availableKeywords={availableKeywords}
+          blockKeywords={blockKeywords}
+          layerKeywords={layerKeywords}
           onComplete={handleComplete}
         />
       )}
