@@ -58,7 +58,7 @@ from ezdxf import readfile
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 
-from app.config import UPLOAD_DIR, EXCLUDED_LAYER_NAMES, KEYWORDS, BLACKLIST, DPI
+from app.config import UPLOAD_DIR , DPI
 from app.controllers.db_controller import DbController
 from app.controllers.dxf_controller import DxfController
 from app.models import ExportParams, LinkRequest, KeywordTree
@@ -97,9 +97,10 @@ async def upload_file(files: List[UploadFile] = File(...)):
     layer_found: set[str] = set()
     # scan blocks
     for blk in doc.blocks:
+       nm = blk.name.upper()
         #add code to filter only words with reg expression
-       if re.fullmatch(r"[A-Za-z]{3,}", blk.name):    # letters only, length ≥ 3
-            block_found.add(blk.name)
+       if re.fullmatch(r"[A-Za-z]{3,}", nm):    # letters only, length ≥ 3
+            block_found.add(nm)
             
         # found.add(blk)
         # name = blk.name.upper()
@@ -141,13 +142,11 @@ def preview_from_selection(params: dict):
     """
     try:
         preview_id = uuid.uuid4().hex
-        file_path = Path(params["temp_path"])
-
+        file_path = Path(params["temp_path"]) 
+        keywords = params.get("keywords", [])
         metadata, rel_paths = DxfController.preview(
             file_path=file_path,
-            keywords=params.get("keywords", list(KEYWORDS)),
-            blacklist=params.get("blacklist", list(BLACKLIST)),
-            excluded_layer_names=set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES)),
+            keywords=keywords,     
             dpi=params.get("dpi", DPI),
             plan_id=preview_id
         )
@@ -298,9 +297,6 @@ def generate_from_selection(params: dict):
         file_path = Path(params["temp_path"])
         new_plan_id = DxfController.process(
             file_path=file_path,
-            keywords=params.get("keywords", list(KEYWORDS)),
-            blacklist=params.get("blacklist", list(BLACKLIST)),
-            excluded_layer_names=set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES)),
             dpi=params.get("dpi", DPI),
             plan_id=plan_id
         )

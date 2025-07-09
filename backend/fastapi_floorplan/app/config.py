@@ -53,12 +53,12 @@ SQLALCHEMY_DATABASE_URL = (
 # ---------------------------------------------------------------------------- #
 # DXF Processing Parameters
 # ---------------------------------------------------------------------------- #
-# Keywords to identify floor-related blocks and layers
-KEYWORDS = ("GROUND", "FIRST", "SECOND", "THIRD", "FOURTH", "ROOF", "TOP")
-# Names to skip entirely
-BLACKLIST = ("LEVEL", "TAG","ALL")
-# Specific layer names to exclude
-EXCLUDED_LAYER_NAMES = {"A-ROOF_01", "A-ROOF_02", "A-ROOF_03"}
+# # Keywords to identify floor-related blocks and layers
+# KEYWORDS = ("GROUND", "FIRST", "SECOND", "THIRD", "FOURTH", "ROOF", "TOP")
+# # Names to skip entirely
+# BLACKLIST = ("LEVEL", "TAG","ALL")
+# # Specific layer names to exclude
+# EXCLUDED_LAYER_NAMES = {"A-ROOF_01", "A-ROOF_02", "A-ROOF_03"}
 # DPI resolution for PNG exports
-DPI = 150
+DPI = 300
 

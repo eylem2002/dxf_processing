@@ -64,11 +64,11 @@ class ProjectDxfLink(Base):
 # ------------------------------------------------------------------------------
 class ProcessDxfParams(BaseModel):
     # List of layer/block keywords to include (optional)
-    keywords: Optional[List[str]] = None
+    # keywords: Optional[List[str]] = None
     # List of substrings to blacklist (optional)
-    blacklist: Optional[List[str]] = None
+    # blacklist: Optional[List[str]] = None
     # Exact layer names to exclude (optional)
-    excluded_layer_names: Optional[Set[str]] = None
+    # excluded_layer_names: Optional[Set[str]] = None
     # DPI for image rendering (optional)
     dpi: Optional[int] = None
 

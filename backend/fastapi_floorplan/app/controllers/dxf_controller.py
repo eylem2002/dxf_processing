@@ -36,6 +36,7 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 import uuid
 import ezdxf
 from ezdxf.addons.drawing import matplotlib as ezplt
@@ -43,9 +44,7 @@ from PIL import Image
 
 from app.config import (
     UPLOAD_DIR,
-    KEYWORDS,
-    BLACKLIST,
-    EXCLUDED_LAYER_NAMES,
+    
     DPI,
     cfg,
     OUTPUT_DIR,
@@ -103,8 +102,6 @@ class DxfController:
     def process(
         file_path: Path,
         keywords: list[str],
-        blacklist: list[str],
-        excluded_layer_names: set[str],
         dpi: int,
         plan_id: str
     ) -> str:
@@ -123,8 +120,8 @@ class DxfController:
         # ----------------------------- BLOCK PASS ----------------------------------- #
         for blk in doc.blocks:
             name_u = blk.name.upper()
-            if any(k in name_u for k in keywords) and not any(b in name_u for b in blacklist):
-                kw = next(k for k in keywords if k in name_u)
+            if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:      
+                kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
 
@@ -148,12 +145,8 @@ class DxfController:
         # ----------------------------- LAYER PASS ----------------------------------- #
         for lay in doc.layers:
             name_u = lay.dxf.name.upper()
-            if (
-                any(k in name_u for k in keywords)
-                and not any(b in name_u for b in blacklist)
-                and name_u not in excluded_layer_names
-            ):
-                kw = next(k for k in keywords if k in name_u)
+            if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:
+                kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
 
@@ -196,16 +189,11 @@ class DxfController:
         temp_path = UPLOAD_DIR / f"{plan_id}{ext}"
         temp_path.write_bytes(await file.read())
 
-        keywords = params.get("keywords", list(KEYWORDS))
-        blacklist = params.get("blacklist", list(BLACKLIST))
-        excluded = set(params.get("excluded_layer_names", EXCLUDED_LAYER_NAMES))
+       
         dpi_value = params.get("dpi", DPI)
 
         return DxfController.process(
             file_path=temp_path,
-            keywords=keywords,
-            blacklist=blacklist,
-            excluded_layer_names=excluded,
             dpi=dpi_value,
             plan_id=plan_id
         )
@@ -277,8 +265,6 @@ class DxfController:
     def preview(
         file_path: Path,
         keywords: list[str],
-        blacklist: list[str],
-        excluded_layer_names: set[str],
         dpi: int,
         plan_id: str
     ) -> tuple[dict[str, list[str]], list[str]]:
@@ -293,10 +279,12 @@ class DxfController:
         base_folder.mkdir(parents=True, exist_ok=True)
 
         # ----------------------------- BLOCK PASS ----------------------------------- #
+           
         for blk in doc.blocks:
             name_u = blk.name.upper()
-            if any(k in name_u for k in keywords) and not any(b in name_u for b in blacklist):
-                kw = next(k for k in keywords if k in name_u)
+            # only render blocks whose UPPER name is in the selected keywords
+            if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:
+                kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
 
@@ -311,15 +299,13 @@ class DxfController:
                 DxfController.force_black_on_white(out)
                 metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))
 
+
         # ----------------------------- LAYER PASS ----------------------------------- #
         for lay in doc.layers:
             name_u = lay.dxf.name.upper()
-            if (
-                any(k in name_u for k in keywords)
-                and not any(b in name_u for b in blacklist)
-                and name_u not in excluded_layer_names
-            ):
-                kw = next(k for k in keywords if k in name_u)
+            # only render layers whose UPPER name is in the selected keywords
+            if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:
+                kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
 
@@ -335,6 +321,7 @@ class DxfController:
                 )
                 DxfController.force_black_on_white(out)
                 metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))
+
 
         meta_file = base_folder / f"metadata-{plan_id}.json"
         meta_file.write_text(json.dumps(metadata, indent=4))
@@ -357,13 +344,9 @@ class DxfController:
 
         # collect all block names
         for blk in doc.blocks:
-            name = blk.name.upper()
-            if any(b in name for b in BLACKLIST):
-                continue
-            for k in KEYWORDS:
-                if k in name:
-                    
-                    block_found.add(k)
+            nm = blk.name.upper()
+            if re.fullmatch(r"[A-Za-z]{3,}", nm):
+                block_found.add(nm) 
 
         # collect all layer-style names
         layer_names = {lay.dxf.name.upper() for lay in doc.layers}
@@ -373,11 +356,7 @@ class DxfController:
             if hasattr(e.dxf, "layer")
         }
         for nm in layer_names.union(entity_layers):
-            if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
-                continue
-            for k in KEYWORDS:
-                if k in nm:
-                    
-                    layer_found.add(k)
+            if re.fullmatch(r"[A-Za-z]{3,}", nm):
+                layer_found.add(nm)
 
         return {"block_keywords": sorted(block_found),"layer_keywords": sorted(layer_found),}
