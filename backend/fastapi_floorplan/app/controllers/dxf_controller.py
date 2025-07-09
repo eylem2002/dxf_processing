@@ -86,7 +86,7 @@ class DxfController:
     def is_floorplan_geometry(entity) -> bool:
         """
         True for DXF entities that form floorplan outlines:
-        LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE.
+        LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE, TEXT, HATCH, 3DSOLID.
         """
         return entity.dxftype() in {
             'LINE',
@@ -96,12 +96,16 @@ class DxfController:
             'ARC',
             'ELLIPSE',
             'SPLINE',
+            'TEXT',
+            'HATCH',
+            '3DSOLID',
         }
 
     @staticmethod
     def process(
         file_path: Path,
         keywords: list[str],
+        entity_types: set[str],
         dpi: int,
         plan_id: str
     ) -> str:
@@ -265,6 +269,7 @@ class DxfController:
     def preview(
         file_path: Path,
         keywords: list[str],
+        entity_types: set[str],
         dpi: int,
         plan_id: str
     ) -> tuple[dict[str, list[str]], list[str]]:
@@ -277,7 +282,12 @@ class DxfController:
         metadata: dict[str, list[str]] = {}
         base_folder = OUTPUT_DIR / f"floor_pngs_{plan_id}"
         base_folder.mkdir(parents=True, exist_ok=True)
-
+        
+        def filter_func(e, layer_name=None):
+                ok_geom = e.dxftype() in entity_types
+                if layer_name:
+                    ok_geom = ok_geom and getattr(e.dxf, "layer", "") == layer_name
+                return ok_geom
         # ----------------------------- BLOCK PASS ----------------------------------- #
            
         for blk in doc.blocks:
@@ -294,7 +304,7 @@ class DxfController:
                     out,
                     dpi=dpi,
                     config=cfg,
-                    filter_func=DxfController.is_floorplan_geometry
+                    filter_func=filter_func
                 )
                 DxfController.force_black_on_white(out)
                 metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))
@@ -315,9 +325,7 @@ class DxfController:
                     out,
                     dpi=dpi,
                     config=cfg,
-                    filter_func=lambda e, layer=lay.dxf.name: (
-                        DxfController.is_floorplan_geometry(e) and e.dxf.layer == layer
-                    )
+                    filter_func=lambda e, layer=lay.dxf.name: filter_func(e, layer)
                 )
                 DxfController.force_black_on_white(out)
                 metadata.setdefault(kw, []).append(str(out.relative_to(OUTPUT_DIR)))

@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+const ENTITY_TYPES = [
+  'LINE',
+  'LWPOLYLINE',
+  'POLYLINE',
+  'CIRCLE',
+  'ARC',
+  'ELLIPSE',
+  'SPLINE',
+  'TEXT',
+  'HATCH',
+  '3DSOLID',
+];
+
 const KeywordTreeGenerator = ({
   tempPath,
   projectId,
@@ -11,6 +24,7 @@ const KeywordTreeGenerator = ({
   const [step, setStep] = useState(1);
   const [selectedKeywords, setSelectedKeywords] = useState([]);
   const [dpi, setDpi] = useState(300);
+  const [selectedEntities, setSelectedEntities] = useState(new Set(ENTITY_TYPES));
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -26,6 +40,13 @@ const KeywordTreeGenerator = ({
       prev.includes(kw) ? prev.filter(x => x !== kw) : [...prev, kw]
     );
 
+  const toggleEntity = type =>
+    setSelectedEntities(prev => {
+      const nxt = new Set(prev);
+      nxt.has(type) ? nxt.delete(type) : nxt.add(type);
+      return nxt;
+    });
+
   const handleGenerate = async () => {
     if (!selectedKeywords.length) {
       alert('Select at least one keyword.');
@@ -37,7 +58,8 @@ const KeywordTreeGenerator = ({
       const res = await axios.post('/preview_from_selection/', {
         temp_path: tempPath,
         dpi,
-        keywords: selectedKeywords
+        keywords: selectedKeywords,
+        entity_types: Array.from(selectedEntities),
       });
       setPreviewId(res.data.preview_id);
       setImageUrls(res.data.image_urls);
@@ -75,7 +97,10 @@ const KeywordTreeGenerator = ({
   };
 
   const openLightbox = (url, rel) => {
-    const title = (rel.split('/').pop() || '').replace(/[-.]/g, ' ').replace(/png$/i, '').trim();
+    const title = (rel.split('/').pop() || '')
+      .replace(/[-.]/g, ' ')
+      .replace(/png$/i, '')
+      .trim();
     setLightbox({ open: true, url, title });
   };
   const closeLightbox = () => setLightbox(lb => ({ ...lb, open: false }));
@@ -93,6 +118,21 @@ const KeywordTreeGenerator = ({
           disabled={loading}
           style={{ width: 80 }}
         />
+      </div>
+
+      <div style={{ margin: '12px 0' }}>
+        <h4>Include Geometry Types</h4>
+        {ENTITY_TYPES.map(type => (
+          <label key={type} style={{ marginRight: 8 }}>
+            <input
+              type="checkbox"
+              checked={selectedEntities.has(type)}
+              onChange={() => toggleEntity(type)}
+              disabled={loading}
+            />{' '}
+            {type}
+          </label>
+        ))}
       </div>
 
       {/* Keyword buttons */}
@@ -154,10 +194,16 @@ const KeywordTreeGenerator = ({
             {imageUrls.map((url, idx) => {
               const rel = relPaths[idx];
               const isSel = selectedImages.has(rel);
-              const title = (rel.split('/').pop() || '').replace(/[-.]/g, ' ').replace(/png$/i, '').trim();
+              const title = (rel.split('/').pop() || '')
+                .replace(/[-.]/g, ' ')
+                .replace(/png$/i, '')
+                .trim();
               return (
                 <div key={rel} style={{ width: 260, cursor: 'pointer', textAlign: 'center' }}>
-                  <div onClick={() => openLightbox(url, rel)} style={{ marginBottom: 8, fontWeight: 'bold' }}>
+                  <div
+                    onClick={() => openLightbox(url, rel)}
+                    style={{ marginBottom: 8, fontWeight: 'bold' }}
+                  >
                     {title}
                   </div>
                   <img
@@ -181,7 +227,11 @@ const KeywordTreeGenerator = ({
             })}
           </div>
 
-          <button onClick={handleExport} disabled={loading || !selectedImages.size} style={{ marginTop: 20 }}>
+          <button
+            onClick={handleExport}
+            disabled={loading || !selectedImages.size}
+            style={{ marginTop: 20 }}
+          >
             {loading ? 'Exporting…' : 'Export Selected'}
           </button>
         </>
@@ -200,15 +250,32 @@ const KeywordTreeGenerator = ({
             zIndex: 1000
           }}
         >
-          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', padding: 20, borderRadius: 6 }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'relative', background: '#fff', padding: 20, borderRadius: 6 }}
+          >
             <button
               onClick={closeLightbox}
-              style={{ position: 'absolute', top: 10, right: 10, fontSize: 18, background: 'transparent', border: 'none', cursor: 'pointer' }}
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                fontSize: 18,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer'
+              }}
             >
               ×
             </button>
-            <img src={lightbox.url} alt={lightbox.title} style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: 4 }} />
-            <div style={{ marginTop: 12, fontWeight: 'bold', textAlign: 'center' }}>{lightbox.title}</div>
+            <img
+              src={lightbox.url}
+              alt={lightbox.title}
+              style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: 4 }}
+            />
+            <div style={{ marginTop: 12, fontWeight: 'bold', textAlign: 'center' }}>
+              {lightbox.title}
+            </div>
           </div>
         </div>
       )}

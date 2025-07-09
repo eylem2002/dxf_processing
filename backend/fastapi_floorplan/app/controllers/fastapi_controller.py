@@ -144,10 +144,14 @@ def preview_from_selection(params: dict):
         preview_id = uuid.uuid4().hex
         file_path = Path(params["temp_path"]) 
         keywords = params.get("keywords", [])
+        entity_types = set(params.get("entity_types", []))
+        dpi = params.get("dpi", DPI)
+
         metadata, rel_paths = DxfController.preview(
             file_path=file_path,
-            keywords=keywords,     
-            dpi=params.get("dpi", DPI),
+            keywords=keywords, 
+            entity_types=entity_types,    
+            dpi=dpi,
             plan_id=preview_id
         )
 
