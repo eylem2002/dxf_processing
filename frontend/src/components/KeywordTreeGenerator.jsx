@@ -17,8 +17,10 @@ const ENTITY_TYPES = [
 const KeywordTreeGenerator = ({
   tempPath,
   projectId,
-  blockKeywords = [],
-  layerKeywords = [],
+  meaningfulBlockKeywords = [],
+  allBlockKeywords = [],
+  meaningfulLayerKeywords = [],
+  allLayerKeywords = [],
   onComplete
 }) => {
   const [step, setStep] = useState(1);
@@ -34,6 +36,8 @@ const KeywordTreeGenerator = ({
   const [selectedImages, setSelectedImages] = useState(new Set());
 
   const [lightbox, setLightbox] = useState({ open: false, url: '', title: '' });
+  const [showAllBlocks, setShowAllBlocks] = useState(false);
+  const [showAllLayers, setShowAllLayers] = useState(false);
 
   const toggleKeyword = kw =>
     setSelectedKeywords(prev =>
@@ -138,47 +142,61 @@ const KeywordTreeGenerator = ({
       {/* Keyword buttons */}
       <div style={{ margin: '20px 0' }}>
         <h4>Block Keywords</h4>
-        {blockKeywords.length === 0 ? (
+        {meaningfulBlockKeywords.length === 0 && allBlockKeywords.length === 0 ? (
           <em>None found in blocks.</em>
         ) : (
-          blockKeywords.map(kw => (
-            <button
-              key={`blk-${kw}`}
-              onClick={() => toggleKeyword(kw)}
-              disabled={loading}
-              style={{
-                margin: 4,
-                padding: '6px 12px',
-                background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
-                border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
-                borderRadius: 4
-              }}
-            >
-              {kw}
-            </button>
-          ))
+          <>
+            {(showAllBlocks ? allBlockKeywords : meaningfulBlockKeywords).map(kw => (
+              <button
+                key={`blk-${kw}`}
+                onClick={() => toggleKeyword(kw)}
+                disabled={loading}
+                style={{
+                  margin: 4,
+                  padding: '6px 12px',
+                  background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
+                  border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
+                  borderRadius: 4
+                }}
+              >
+                {kw}
+              </button>
+            ))}
+            {!showAllBlocks && allBlockKeywords.length > meaningfulBlockKeywords.length && (
+              <button onClick={() => setShowAllBlocks(true)} style={{ margin: 4, fontStyle: 'italic' }}>
+                + Show {allBlockKeywords.length - meaningfulBlockKeywords.length} more…
+              </button>
+            )}
+          </>
         )}
 
         <h4 style={{ marginTop: 16 }}>Layer Keywords</h4>
-        {layerKeywords.length === 0 ? (
+        {meaningfulLayerKeywords.length === 0 && allLayerKeywords.length === 0 ? (
           <em>None found in layers.</em>
         ) : (
-          layerKeywords.map(kw => (
-            <button
-              key={`lay-${kw}`}
-              onClick={() => toggleKeyword(kw)}
-              disabled={loading}
-              style={{
-                margin: 4,
-                padding: '6px 12px',
-                background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
-                border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
-                borderRadius: 4
-              }}
-            >
-              {kw}
-            </button>
-          ))
+          <>
+            {(showAllLayers ? allLayerKeywords : meaningfulLayerKeywords).map(kw => (
+              <button
+                key={`lay-${kw}`}
+                onClick={() => toggleKeyword(kw)}
+                disabled={loading}
+                style={{
+                  margin: 4,
+                  padding: '6px 12px',
+                  background: selectedKeywords.includes(kw) ? '#d4ffd4' : '#f0f0f0',
+                  border: selectedKeywords.includes(kw) ? '2px solid green' : '1px solid #999',
+                  borderRadius: 4
+                }}
+              >
+                {kw}
+              </button>
+            ))}
+            {!showAllLayers && allLayerKeywords.length > meaningfulLayerKeywords.length && (
+              <button onClick={() => setShowAllLayers(true)} style={{ margin: 4, fontStyle: 'italic' }}>
+                + Show {allLayerKeywords.length - meaningfulLayerKeywords.length} more…
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -242,7 +260,10 @@ const KeywordTreeGenerator = ({
           onClick={closeLightbox}
           style={{
             position: 'fixed',
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',

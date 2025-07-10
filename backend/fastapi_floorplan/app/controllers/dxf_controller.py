@@ -39,6 +39,8 @@ from pathlib import Path
 import re
 import uuid
 import ezdxf
+
+import hashlib
 from ezdxf.addons.drawing import matplotlib as ezplt
 from PIL import Image
 
@@ -54,6 +56,7 @@ from app.controllers.db_controller import DbController
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse
 import shutil
+from wordfreq import zipf_frequency
 import mimetypes
 
 
@@ -340,9 +343,11 @@ class DxfController:
     @staticmethod
     def extract_keywords(file_path: Path) -> list[str]:
         """
-         Scan a DXF for our KEYWORDS. Returns two sorted lists:
-         • block_keywords: from block names
-         • layer_keywords: from layer names or entity layers
+         Scan a DXF for our raw keywords, then split into:
+         • all_block_keywords
+         • meaningful_block_keywords
+         • all_layer_keywords
+         • meaningful_layer_keywords
         """
         doc = ezdxf.readfile(str(file_path))
         msp = doc.modelspace()
@@ -367,4 +372,24 @@ class DxfController:
             if re.fullmatch(r"[A-Za-z]{3,}", nm):
                 layer_found.add(nm)
 
-        return {"block_keywords": sorted(block_found),"layer_keywords": sorted(layer_found),}
+        # sort the raw lists
+        all_blocks = sorted(block_found)
+        all_layers = sorted(layer_found)
+
+        # use an English dict to pick “real words”
+                # use wordfreq to pick “real words” (frequency threshold ~3.0)
+      
+
+        def is_english(w: str) -> bool:
+            # true if word is common enough in English
+           return zipf_frequency(w.lower(), 'en') > 3.0
+
+        meaningful_blocks = [w for w in all_blocks if is_english(w)]
+        meaningful_layers = [w for w in all_layers if is_english(w)]
+
+        return {
+            "all_block_keywords":    all_blocks,
+            "meaningful_block_keywords": meaningful_blocks,
+            "all_layer_keywords":    all_layers,
+            "meaningful_layer_keywords": meaningful_layers,
+        }

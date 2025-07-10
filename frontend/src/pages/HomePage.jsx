@@ -8,17 +8,23 @@ const HomePage = () => {
   const [step, setStep] = useState(1);
   const [projectId, setProjectId] = useState('');
   const [tempPath, setTempPath] = useState('');
-  // const [availableKeywords, setAvailableKeywords] = useState([]);
-  const [blockKeywords, setBlockKeywords] = useState([]);
-  const [layerKeywords, setLayerKeywords] = useState([]);
+  // capture both meaningful & all keyword lists
+  const [kwArgs, setKwArgs] = useState({
+    meaningfulBlockKeywords: [],
+    allBlockKeywords: [],
+    meaningfulLayerKeywords: [],
+    allLayerKeywords: []
+  });
   const [planId, setPlanId] = useState('');
 
-  // after upload: capture tempPath and keywords
-  const handleUploadSuccess = (path,blocks, layers) => {
+  // after upload: capture tempPath and keyword sets
+  const handleUploadSuccess = (
+    path,
+    meaningfulBlockKeywords, allBlockKeywords,
+    meaningfulLayerKeywords, allLayerKeywords
+  ) => {
     setTempPath(path);
-    setBlockKeywords(blocks);
-    setLayerKeywords(layers);
-    // setAvailableKeywords(keywords);
+    setKwArgs({ meaningfulBlockKeywords, allBlockKeywords, meaningfulLayerKeywords, allLayerKeywords });
     setStep(2);
   };
 
@@ -49,10 +55,7 @@ const HomePage = () => {
           <hr style={{ margin: '40px 0' }} />
 
           <h3>Or select an existing plan:</h3>
-          <DXFList
-            projectId={projectId}
-            onSelectPlan={handleSelectExisting}
-          />
+          <DXFList projectId={projectId} onSelectPlan={handleSelectExisting} />
         </>
       )}
 
@@ -60,8 +63,10 @@ const HomePage = () => {
         <KeywordTreeGenerator
           tempPath={tempPath}
           projectId={projectId}
-          blockKeywords={blockKeywords}
-          layerKeywords={layerKeywords}
+          meaningfulBlockKeywords={kwArgs.meaningfulBlockKeywords}
+          allBlockKeywords={kwArgs.allBlockKeywords}
+          meaningfulLayerKeywords={kwArgs.meaningfulLayerKeywords}
+          allLayerKeywords={kwArgs.allLayerKeywords}
           onComplete={handleComplete}
         />
       )}
