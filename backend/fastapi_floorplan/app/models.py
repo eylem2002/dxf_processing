@@ -63,13 +63,6 @@ class ProjectDxfLink(Base):
 # Pydantic schemas for request/response validation
 # ------------------------------------------------------------------------------
 class ProcessDxfParams(BaseModel):
-    # List of layer/block keywords to include (optional)
-    # keywords: Optional[List[str]] = None
-    # List of substrings to blacklist (optional)
-    # blacklist: Optional[List[str]] = None
-    # Exact layer names to exclude (optional)
-    # excluded_layer_names: Optional[Set[str]] = None
-    # DPI for image rendering (optional)
     dpi: Optional[int] = None
 
 class ExportParams(BaseModel):

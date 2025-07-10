@@ -7,7 +7,7 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = e => {
-    // avoid duplicates
+    // to avoid duplicates
     const selected = Array.from(e.target.files).filter(
       f => !files.some(x => x.name === f.name)
     );
@@ -43,21 +43,7 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
       const tempMap = res.data.temp_files || {};
       const tempIds = Object.keys(tempMap);
       if (tempIds.length === 0) throw new Error('No temp files returned.');
-
-      // Pick the first uploaded DXF
-      // const tempPath = tempMap[tempIds[0]];
-
-      // setMessage('Upload successful. Proceed to keyword selection.');
-      // setFiles([]);
-      // onUploadSuccess(tempPath);
       const tempPath = tempMap[tempIds[0]];
-      // const keywords = res.data.available_keywords || [];
-      //  const blockKeywords = res.data.block_keywords || [];
-      //  const layerKeywords = res.data.layer_keywords || [];
-      // setFiles([]);
-      // onUploadSuccess(tempPath, keywords);
-      // onUploadSuccess(tempPath, blockKeywords, layerKeywords);
-      // pull out both meaningful & all lists from the response
       const meaningfulBlock = res.data.meaningful_block_keywords || [];
       const allBlock       = res.data.all_block_keywords       || [];
       const meaningfulLayer= res.data.meaningful_layer_keywords || [];
@@ -68,7 +54,8 @@ const DXFUploadForm = ({ projectId, setProjectId, onUploadSuccess }) => {
       onUploadSuccess(
         tempPath,
         meaningfulBlock, allBlock,
-        meaningfulLayer, allLayer
+        meaningfulLayer, allLayer,
+        res.data.entity_types
       );
     } catch (err) {
       console.error(err);

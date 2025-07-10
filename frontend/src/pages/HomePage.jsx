@@ -1,3 +1,4 @@
+// pages/index.jsx
 import React, { useState } from 'react';
 import DXFUploadForm from '../components/DXFUploadForm';
 import DXFList from '../components/DXFList';
@@ -15,16 +16,20 @@ const HomePage = () => {
     meaningfulLayerKeywords: [],
     allLayerKeywords: []
   });
+  // capture the list of entity types
+  const [entityTypes, setEntityTypes] = useState([]);
   const [planId, setPlanId] = useState('');
 
-  // after upload: capture tempPath and keyword sets
+  // after upload: capture tempPath, keyword sets, and entity types
   const handleUploadSuccess = (
     path,
     meaningfulBlockKeywords, allBlockKeywords,
-    meaningfulLayerKeywords, allLayerKeywords
+    meaningfulLayerKeywords, allLayerKeywords,
+    extractedEntityTypes
   ) => {
     setTempPath(path);
     setKwArgs({ meaningfulBlockKeywords, allBlockKeywords, meaningfulLayerKeywords, allLayerKeywords });
+    setEntityTypes(extractedEntityTypes);
     setStep(2);
   };
 
@@ -67,6 +72,7 @@ const HomePage = () => {
           allBlockKeywords={kwArgs.allBlockKeywords}
           meaningfulLayerKeywords={kwArgs.meaningfulLayerKeywords}
           allLayerKeywords={kwArgs.allLayerKeywords}
+          entityTypes={entityTypes}
           onComplete={handleComplete}
         />
       )}

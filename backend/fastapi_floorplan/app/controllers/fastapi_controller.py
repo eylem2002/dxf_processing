@@ -87,56 +87,16 @@ async def upload_file(files: List[UploadFile] = File(...)):
 
     # pick the first file's path
     first_path = Path(next(iter(file_map.values())))
-
-    # now scan that DXF for our keywords
-    # doc = readfile(str(first_path))
-    # msp = doc.modelspace()
-
-    # found: set[str] = set()
-    # block_found: set[str] = set()
-    # layer_found: set[str] = set()
-    # scan blocks
-    # for blk in doc.blocks:
-    #    nm = blk.name.upper()
-    #     #add code to filter only words with reg expression
-    #    if re.fullmatch(r"[A-Za-z]{3,}", nm):    # letters only, length ≥ 3
-    #         block_found.add(nm)
-            
-        # found.add(blk)
-        # name = blk.name.upper()
-        # if any(b in name for b in BLACKLIST):
-        #     continue
-        # for k in KEYWORDS:
-        #     if k in name:
-        #         found.add(k)
-        # if name in KEYWORDS:
-        #     found.add(name)
-    # scan layers + entity layers
-    # layer_names = {lay.dxf.name.upper() for lay in doc.layers}
-    # entity_layers = {
-    #     getattr(e.dxf, "layer", "").upper()
-    #     for e in msp if hasattr(e.dxf, "layer")
-    # }
-    # for nm in layer_names.union(entity_layers):
-    #     if re.fullmatch(r"[A-Za-z]{3,}", nm):    # letters only, length ≥ 3
-    #         layer_found.add(nm)
-        # found.add(k)
-        # if nm in EXCLUDED_LAYER_NAMES or any(b in nm for b in BLACKLIST):
-        #     continue
-        # for k in KEYWORDS:
-        #     if k in nm:
-        #         found.add(k)
     # delegate to DxfController.extract_keywords → gives you both “all_…” and “meaningful_…” lists
     kw = DxfController.extract_keywords(first_path)
+    
+    entity_types = DxfController.extract_entity_types(first_path)
+    
     return {
       "temp_files": file_map,
-      **kw,   # unpacks all_block_keywords, meaningful_block_keywords, etc.
+      **kw,   # unpacks all_block_keywords, meaningful_block_keywords..
+      "entity_types": entity_types,
     }
-    # return {
-    #   "temp_files": file_map,
-    #    "block_keywords": sorted(block_found),
-    #    "layer_keywords": sorted(layer_found),
-    # }
 
 @router.post("/preview_from_selection/")
 def preview_from_selection(params: dict):
@@ -181,10 +141,8 @@ def store_from_selection(params: dict):
     # Group by category = the 2nd segment of the path
     metadata: dict[str, list[str]] = {}
     for rel in sel:
-        # rel looks like "floor_pngs_<plan_id>/KEYWORD/…"
         parts = rel.split("/", 2)
-        # parts == ["floor_pngs_<plan_id>", "KEYWORD", "rest/of/file.png"]
-        category = parts[1]    # ← grab index 1, not 0
+        category = parts[1]  
         metadata.setdefault(category, []).append(rel)
 
     primary = next(iter(metadata))

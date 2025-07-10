@@ -1,19 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const ENTITY_TYPES = [
-  'LINE',
-  'LWPOLYLINE',
-  'POLYLINE',
-  'CIRCLE',
-  'ARC',
-  'ELLIPSE',
-  'SPLINE',
-  'TEXT',
-  'HATCH',
-  '3DSOLID',
-];
-
 const KeywordTreeGenerator = ({
   tempPath,
   projectId,
@@ -21,12 +8,14 @@ const KeywordTreeGenerator = ({
   allBlockKeywords = [],
   meaningfulLayerKeywords = [],
   allLayerKeywords = [],
+  entityTypes = [],
   onComplete
 }) => {
   const [step, setStep] = useState(1);
   const [selectedKeywords, setSelectedKeywords] = useState([]);
   const [dpi, setDpi] = useState(300);
-  const [selectedEntities, setSelectedEntities] = useState(new Set(ENTITY_TYPES));
+  // initialize from the passed-in list instead of a hard-coded constant
+  const [selectedEntities, setSelectedEntities] = useState(new Set(entityTypes));
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -126,7 +115,7 @@ const KeywordTreeGenerator = ({
 
       <div style={{ margin: '12px 0' }}>
         <h4>Include Geometry Types</h4>
-        {ENTITY_TYPES.map(type => (
+        {entityTypes.map(type => (
           <label key={type} style={{ marginRight: 8 }}>
             <input
               type="checkbox"

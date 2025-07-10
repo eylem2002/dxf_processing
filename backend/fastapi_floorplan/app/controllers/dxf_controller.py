@@ -85,24 +85,7 @@ class DxfController:
         img.putdata(new_pixels)
         img.save(png_path)
 
-    @staticmethod
-    def is_floorplan_geometry(entity) -> bool:
-        """
-        True for DXF entities that form floorplan outlines:
-        LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, SPLINE, TEXT, HATCH, 3DSOLID.
-        """
-        return entity.dxftype() in {
-            'LINE',
-            'LWPOLYLINE',
-            'POLYLINE',
-            'CIRCLE',
-            'ARC',
-            'ELLIPSE',
-            'SPLINE',
-            'TEXT',
-            'HATCH',
-            '3DSOLID',
-        }
+ 
 
     @staticmethod
     def process(
@@ -163,8 +146,7 @@ class DxfController:
                     png_path,
                     dpi=dpi,
                     config=cfg,
-                    filter_func=lambda e, layer=lay.dxf.name: (
-                        DxfController.is_floorplan_geometry(e) and e.dxf.layer == layer
+                    filter_func=lambda e, layer=lay.dxf.name: ( e.dxf.layer == layer
                     )
                 )
                 DxfController.force_black_on_white(png_path)
@@ -377,9 +359,6 @@ class DxfController:
         all_layers = sorted(layer_found)
 
         # use an English dict to pick “real words”
-                # use wordfreq to pick “real words” (frequency threshold ~3.0)
-      
-
         def is_english(w: str) -> bool:
             # true if word is common enough in English
            return zipf_frequency(w.lower(), 'en') > 3.0
@@ -393,3 +372,19 @@ class DxfController:
             "all_layer_keywords":    all_layers,
             "meaningful_layer_keywords": meaningful_layers,
         }
+
+
+
+
+    @staticmethod
+    def extract_entity_types(file_path: Path) -> list[str]:
+        """
+        Scan the DXF and return a sorted list of every entity.dxftype() it contains,
+        both in modelspace and in each block definition.
+        """
+        doc = ezdxf.readfile(str(file_path))
+        types: set[str] = {e.dxftype() for e in doc.modelspace()}
+        for blk in doc.blocks:
+            for e in blk:
+                types.add(e.dxftype())
+        return sorted(types)
