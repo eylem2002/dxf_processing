@@ -1,53 +1,64 @@
 # ------------------------------------------------------------------------------
 # fastapi_controller.py
 #
-# Defines the FastAPI routes for the DXF Floor Plan service.
-# This module is responsible solely for handling HTTP requests/responses
-# and parameter extraction; it delegates all DXF parsing, rendering,
-# metadata management, and keyword scanning to DxfController.
+# Defines the FastAPI routes for the DXF Floor Plan Service.
+# Responsible for HTTP request parsing, response formatting, and delegating
+# all DXF processing, preview, export, metadata, and keyword tasks to
+# DxfController or DbController.
 #
-# Registered endpoints:
+# Registered Endpoints:
 #
-# 1• POST  /process_dxf/
-#     - Upload one or more DXF files for temporary storage.
-#     - Returns: Map of temp IDs → file paths, plus available keywords.
+# 1. POST   /process_dxf/
+#    • Accepts one or more DXF file uploads.
+#    • Returns: mapping of temporary IDs to file paths,
+#      detected block & layer keywords, and entity types.
 #
-# 2• POST  /preview_from_selection/
-#     - Generate previews (PNG) for a given temp DXF + selected filters.
-#     - Returns: preview_id, metadata, and image URLs (no DB write).
+# 2. POST   /preview_from_selection/
+#    • Generates preview PNGs for a given temp DXF and selected filters
+#      (keywords, entity types).
+#    • Does not persist to DB.
+#    • Returns: preview_id, metadata (keyword → image paths), and URLs.
 #
-# 3• POST  /store_from_selection/
-#     - Persist user-selected preview images into the DB and link to a project.
-#     - Returns: new floor_plan_id.
+# 3. POST   /store_from_selection/
+#    • Persists user-selected preview images into the database.
+#    • Links the saved floor plan to a project.
+#    • Returns: new floor_plan_id.
 #
-# 4• GET   /floors/{plan_id}
-#     - Retrieve metadata for a stored floor plan (images, keyword, timestamp).
+# 4. GET    /floors/{plan_id}
+#    • Retrieves stored floor-plan metadata by its plan_id.
+#    • Returns: keyword-indexed image metadata and timestamps.
 #
-# 5• POST  /export/
-#     - Copy one exported floor-plan image to a “selected_output” job folder.
-#     - Returns: absolute path of the copied image.
+# 5. POST   /export/
+#    • Copies a selected exported floor-plan image to a job’s
+#      selected_output folder.
+#    • Returns: absolute path of the copied image.
 #
-# 6• GET   /floor-plans/{floor_plan_id}/images
-#     - List all exported images for a given floor_plan_id (IDs + filenames).
+# 6. GET    /floor-plans/{floor_plan_id}/images
+#    • Lists all exported images (IDs and filenames) for a given
+#      floor_plan_id.
 #
-# 7• GET   /images/{image_id}
-#     - Serve a previously exported image by its unique image_id.
+# 7. GET    /images/{image_id}
+#    • Serves a previously exported image by its unique image_id.
 #
-# 8• POST  /link_dxf_to_project/
-#     - Link an existing floor_plan to a project.
-#     - Returns: success message.
+# 8. POST   /link_dxf_to_project/
+#    • Links an existing floor plan (by floor_plan_id) to a project.
+#    • Returns: success message.
 #
-# 9• GET   /projects/{project_id}/dxfs
-#     - List all floor plans linked to a given project_id.
+# 9. GET    /projects/{project_id}/dxfs
+#    • Lists all floor plans linked to a given project_id.
 #
-# 10• GET   /api/keywords/tree
-#     - Build and return a flat “tree” of all saved floor-plan images.
+# 10. GET   /api/keywords/tree
+#    • Builds and returns a hierarchical keyword tree of all saved
+#      floor-plan images across projects.
 #
-# 11• POST  /generate_from_selection/
-#     - Process a temp DXF with given keywords/params, save result, and return new ID.
+# 11. POST  /generate_from_selection/
+#    • Processes a temp DXF with selected filters and persists result.
+#    • Returns: new floor_plan_id.
 #
-# 12• GET   /extract_keywords/
-#     - Scan a temp DXF for which KEYWORDS appear (blocks, layers, entity layers).
+# 12. GET   /extract_keywords/
+#    • Scans a temp DXF to list detected block, layer, and entity-layer keywords.
+#    • Returns: all_block_keywords, meaningful_block_keywords,
+#      all_layer_keywords, meaningful_layer_keywords.
 # ------------------------------------------------------------------------------
 import re
 import uuid
@@ -69,7 +80,8 @@ router = APIRouter()
 @router.post("/process_dxf/")
 async def upload_file(files: List[UploadFile] = File(...)):
     """
-    Just marshal the upload and hand it off entirely to DxfController.
+    Handle DXF uploads for preview.
+    Delegates saving and initial keyword/entity scan to DxfController.scan_dxf_for_preview().
     """
     try:
         file_map, kw_args, entity_types = await DxfController.scan_dxf_for_preview(files)

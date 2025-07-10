@@ -1,37 +1,23 @@
 # ------------------------------------------------------------------------------
 # DxfController Module
 #
-# Orchestrates the full DXF → PNG pipeline, then delegates persistence to DbController.
-# Responsibilities:
-#   1. DXF Parsing & Filtering:
-#        • Load DXF via ezdxf
-#        • Identify only “floorplan” geometry (lines, polylines, arcs, etc.)
-#   2. Image Rendering:
-#        • Render each matching BLOCK and LAYER to PNG via ezplt.qsave
-#        • Force a strict black-on-white palette for clarity
-#   3. Deduplication:
-#        • Hash each PNG to avoid duplicates
-#   4. Metadata Management:
-#        • Collect relative paths by keyword into a JSON file
-#   5. Database Integration:
-#        • Save plan record and its metadata via DbController
-#   6. Keyword Extraction Helper:
-#        • Standalone scan of a DXF’s blocks & layers for available keywords
+# Handles DXF file processing for the floorplan service:
+#   • Parse and filter DXF geometry via ezdxf
+#   • Render matching blocks and layers to B/W PNGs via ezplt.qsave
+#   • Deduplicate images using MD5 hashing
+#   • Generate keyword→image metadata JSON
+#   • Persist floor plan records in the DB via DbController
+#   • Provide FastAPI helper methods for preview, processing, export, and keyword/entity scans
 #
-# Exposed static methods:
-#   • process           — full-run: DXF → PNGs → JSON → DB
-#   • preview           — DXF → PNGs → JSON (no DB)
-#   • process_request   — FastAPI helper wrapping process()
-#   • extract_keywords  — FastAPI helper to scan keywords only
-#   • get_floor_metadata, export_floor_image,
-#     list_exported_images, get_image_file_by_id — API integration helpers
-#
-# Dependencies:
-#   - ezdxf, matplotlib (ezplt) for rendering
-#   - PIL for enforcing B/W
-#   - hashlib, uuid for file hashing & IDs
-#   - DbController for persistence
-#   - FastAPI types for API integration
+# Key methods:
+#   - process:        Full pipeline (DXF→PNGs→metadata→DB), raises HTTPException on errors
+#   - preview:        Render PNGs for preview (no DB writes), raises HTTPException on errors
+#   - process_request: Async FastAPI entrypoint for process()
+#   - scan_dxf_for_preview: Async helper to save uploads and extract keywords/entity types
+#   - extract_keywords: Scan a DXF for block and layer keywords
+#   - extract_entity_types: List all DXF entity types
+#   - get_floor_metadata, export_floor_image,
+#     list_exported_images, get_image_file_by_id: API integration helpers (raise HTTPException)
 # ------------------------------------------------------------------------------
 import hashlib
 import json
