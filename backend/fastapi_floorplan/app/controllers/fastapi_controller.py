@@ -69,34 +69,18 @@ router = APIRouter()
 @router.post("/process_dxf/")
 async def upload_file(files: List[UploadFile] = File(...)):
     """
-    Upload DXF files temporarily, then scan the first file for matching KEYWORDS.
-    Delegates file saving and scanning to DxfController.process_request().
-    Returns temp file map and available keywords.
+    Just marshal the upload and hand it off entirely to DxfController.
     """
-    temp_dir = UPLOAD_DIR / "temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        file_map, kw_args, entity_types = await DxfController.scan_dxf_for_preview(files)
+        return {
+            "temp_files": file_map,
+            **kw_args,
+            "entity_types": entity_types,
+        }
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
 
-    file_map: dict[str,str] = {}
-    for f in files:
-        ext = Path(f.filename).suffix
-        tid = uuid.uuid4().hex
-        p = temp_dir / f"{tid}{ext}"
-        content = await f.read()
-        p.write_bytes(content)
-        file_map[tid] = str(p)
-
-    # pick the first file's path
-    first_path = Path(next(iter(file_map.values())))
-    # delegate to DxfController.extract_keywords → gives you both “all_…” and “meaningful_…” lists
-    kw = DxfController.extract_keywords(first_path)
-    
-    entity_types = DxfController.extract_entity_types(first_path)
-    
-    return {
-      "temp_files": file_map,
-      **kw,   # unpacks all_block_keywords, meaningful_block_keywords..
-      "entity_types": entity_types,
-    }
 
 @router.post("/preview_from_selection/")
 def preview_from_selection(params: dict):

@@ -37,6 +37,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+from typing import List
 import uuid
 import ezdxf
 
@@ -279,6 +280,8 @@ class DxfController:
             name_u = blk.name.upper()
             # only render blocks whose UPPER name is in the selected keywords
             if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:
+                if not any(filter_func(e) for e in blk):
+                    continue
                 kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
@@ -300,6 +303,8 @@ class DxfController:
             name_u = lay.dxf.name.upper()
             # only render layers whose UPPER name is in the selected keywords
             if re.fullmatch(r"[A-Za-z]{3,}", name_u) and name_u in keywords:
+                if not any(filter_func(e, lay.dxf.name) for e in msp):
+                        continue
                 kw = name_u
                 folder = base_folder / kw
                 folder.mkdir(parents=True, exist_ok=True)
@@ -388,3 +393,28 @@ class DxfController:
             for e in blk:
                 types.add(e.dxftype())
         return sorted(types)
+
+
+    @staticmethod
+    async def scan_dxf_for_preview(files: List[UploadFile]):
+        """
+        Save the uploads to UPLOAD_DIR/temp, then return:
+          • file_map: {temp_id: str(path)}
+          • kw_args: output of extract_keywords()
+          • entity_types: output of extract_entity_types()
+        """
+        temp_dir = UPLOAD_DIR / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        file_map: dict[str,str] = {}
+        for f in files:
+            ext = Path(f.filename).suffix
+            tid = uuid.uuid4().hex
+            p = temp_dir / f"{tid}{ext}"
+            p.write_bytes(await f.read())
+            file_map[tid] = str(p)
+
+        first = Path(next(iter(file_map.values())))
+        kw_args = DxfController.extract_keywords(first)
+        entity_types = DxfController.extract_entity_types(first)
+        return file_map, kw_args, entity_types
